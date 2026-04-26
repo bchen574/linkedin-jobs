@@ -645,7 +645,7 @@ function JobCards({
       {jobs.map((job) => (
         <article
           key={job.id}
-          className="rounded-md border bg-background p-3"
+          className="border bg-background p-3"
         >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -662,7 +662,7 @@ function JobCards({
             <JobCardField label="Experience" value={getJobExperienceText(job)} />
           </div>
 
-          <div className="mt-3 flex items-center justify-end gap-2">
+          <div className="mt-4 flex items-center justify-start gap-2">
             {job.linkedInUrl ? (
               <Button asChild size="icon-sm" variant="outline">
                 <a
