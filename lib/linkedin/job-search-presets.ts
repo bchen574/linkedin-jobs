@@ -5,7 +5,7 @@ const canadaGeoId = "101174742";
 
 export const wideNetJobSearchPresets: JobSearchParams[] = [
   {
-    keywords: ["UX Designer"],
+    keywords: ["UX Design"],
     location: canadaLocation,
     geoId: canadaGeoId,
     postedWithin: "month",
@@ -13,7 +13,7 @@ export const wideNetJobSearchPresets: JobSearchParams[] = [
     page: 0,
   },
   {
-    keywords: ["Product Designer"],
+    keywords: ["Product Design"],
     location: canadaLocation,
     geoId: canadaGeoId,
     postedWithin: "month",
@@ -21,7 +21,7 @@ export const wideNetJobSearchPresets: JobSearchParams[] = [
     page: 0,
   },
   {
-    keywords: ["UX/UI Designer"],
+    keywords: ["UX/UI"],
     location: canadaLocation,
     geoId: canadaGeoId,
     postedWithin: "month",

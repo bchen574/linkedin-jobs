@@ -319,7 +319,24 @@ export function JobsTable() {
           ))}
         </div>
 
-        <div className="bg-background">
+        <div className="md:hidden">
+          <JobCards
+            jobs={visibleJobs}
+            isLoading={isLoading}
+            emptyMessage="No jobs found."
+            onHide={hideJob}
+          />
+          <p className="mt-3 text-center text-xs text-muted-foreground">
+            {getTableCaption({
+              isLoading,
+              jobs,
+              visibleJobs,
+              lastUpdatedAt,
+            })}
+          </p>
+        </div>
+
+        <div className="hidden bg-background md:block">
           <Table className="table-fixed">
             <colgroup>
               <col className="w-[calc((100%_-_16.5rem)_/_5)]" />
@@ -446,7 +463,19 @@ export function JobsTable() {
               Results you have hidden stay out of the main list.
             </p>
           </div>
-          <div className="bg-background">
+          <div className="md:hidden">
+            <JobCards
+              jobs={hiddenJobs}
+              isLoading={false}
+              emptyMessage="Hidden jobs will appear here."
+            />
+            <p className="mt-3 text-center text-xs text-muted-foreground">
+              {hiddenJobs.length
+                ? `${hiddenJobs.length} hidden jobs.`
+                : "No hidden jobs."}
+            </p>
+          </div>
+          <div className="hidden bg-background md:block">
             <Table className="table-fixed">
               <colgroup>
                 <col className="w-[calc((100%_-_10.5rem)_/_5)]" />
@@ -589,6 +618,114 @@ function JobSearchProgress() {
         Estimated time: 5 minutes.
       </p>
     </div>
+  );
+}
+
+function JobCards({
+  jobs,
+  isLoading,
+  emptyMessage,
+  onHide,
+}: {
+  jobs: JobResult[];
+  isLoading: boolean;
+  emptyMessage: string;
+  onHide?: (job: JobResult) => void;
+}) {
+  if (!jobs.length) {
+    return (
+      <div className="border bg-background px-3 py-10 text-center text-sm text-muted-foreground">
+        {isLoading ? "Loading jobs..." : emptyMessage}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {jobs.map((job) => (
+        <article
+          key={job.id}
+          className="rounded-md border bg-background p-3"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="truncate text-sm font-semibold">{job.title}</h3>
+              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                {job.company}
+              </p>
+            </div>
+            <PostedAtLabel job={job} />
+          </div>
+
+          <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+            <JobCardField label="Location" value={job.location} />
+            <JobCardField label="Experience" value={getJobExperienceText(job)} />
+          </div>
+
+          <div className="mt-3 flex items-center justify-end gap-2">
+            {job.linkedInUrl ? (
+              <Button asChild size="icon-sm" variant="outline">
+                <a
+                  href={job.linkedInUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={`Open LinkedIn post for ${job.title}`}
+                >
+                  <ArrowSquareOut aria-hidden="true" weight="bold" />
+                </a>
+              </Button>
+            ) : null}
+            {job.applyUrl ? (
+              <Button asChild size="sm">
+                <a href={job.applyUrl} target="_blank" rel="noreferrer">
+                  Apply
+                  <ArrowSquareOut aria-hidden="true" weight="bold" />
+                </a>
+              </Button>
+            ) : (
+              <span className="text-xs text-muted-foreground">No link</span>
+            )}
+            {onHide ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => onHide(job)}
+              >
+                Hide
+              </Button>
+            ) : null}
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function JobCardField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[0.6875rem] font-medium uppercase tracking-normal text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-0.5 truncate text-foreground">{value}</p>
+    </div>
+  );
+}
+
+function PostedAtLabel({ job }: { job: JobResult }) {
+  if (isFreshJob(job)) {
+    return (
+      <span className="shrink-0 border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300">
+        {job.postedAt}
+      </span>
+    );
+  }
+
+  return (
+    <span className="shrink-0 pt-0.5 text-xs text-muted-foreground">
+      {job.postedAt}
+    </span>
   );
 }
 
@@ -795,6 +932,10 @@ function getVisibleJobs(jobsToFilter: JobResult[], selectedExperience: string) {
 
 function getExperienceLabel(job: JobResult) {
   return job.yearsOfExperience ?? "Not checked";
+}
+
+function getJobExperienceText(job: JobResult) {
+  return job.yearsOfExperience ?? (job.descriptionText ? "Checking..." : "Not checked");
 }
 
 function sortExperienceFilters(
