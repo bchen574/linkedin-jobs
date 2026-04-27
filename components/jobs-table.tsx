@@ -1,13 +1,12 @@
 "use client";
 
 import { ArrowClockwise, ArrowSquareOut } from "@phosphor-icons/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
-import { getJobExperience } from "@/lib/api/get-job-experience";
-import { getJobsFromSupabase } from "@/lib/api/get-jobs-from-supabase";
-import { saveJobsToSupabase } from "@/lib/api/save-jobs-to-supabase";
-import { searchWideNetJobs } from "@/lib/api/search-jobs";
-import type { PostedWithin } from "@/lib/linkedin/types";
+import { useJobs } from "@/hooks/use-jobs";
+import { getJobExperienceText } from "@/lib/jobs/filters";
+import { isFreshJob } from "@/lib/jobs/transforms";
+import type { JobResult } from "@/lib/jobs/types";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,211 +29,24 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-const refreshIntervalMs = 2 * 60 * 60 * 1000;
-const dayMs = 24 * 60 * 60 * 1000;
-const weekMs = 7 * dayMs;
-const monthMs = 30 * dayMs;
-const jobsFetchLimit = 150;
 const loadingBarDurationMs = 5 * 60 * 1000;
 const maxEstimatedProgress = 95;
-const experienceFilterOrder = [
-  "All",
-  "0-1 years",
-  "1-2 years",
-  "2-3 years",
-  "3-5 years",
-  "5-7 years",
-  "7-10 years",
-  "10+ years",
-  "Not specified",
-  "Not checked",
-];
-
-type JobResult = {
-  id: string;
-  title: string;
-  postedAt: string;
-  postedAtTimestamp?: number;
-  company: string;
-  location: string;
-  descriptionText?: string;
-  yearsOfExperience?: string;
-  linkedInUrl?: string;
-  applyUrl?: string;
-  hiddenAt?: number;
-};
-
-type SavedJobs = {
-  fetchedAt: number;
-  jobs: JobResult[];
-  hiddenJobs: JobResult[];
-};
 
 export function JobsTable() {
-  const [jobs, setJobs] = useState<JobResult[]>([]);
-  const [hiddenJobs, setHiddenJobs] = useState<JobResult[]>([]);
-  const [errorMessage, setErrorMessage] = useState<string>();
-  const [isLoading, setIsLoading] = useState(true);
-  const [isFetchingJobs, setIsFetchingJobs] = useState(false);
-  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date>();
-  const [selectedExperience, setSelectedExperience] = useState("All");
-  const isSearchInProgress = useRef(false);
-  const isExperienceLookupInProgress = useRef(false);
-  const experienceFilters = getExperienceFilters(jobs);
-  const visibleJobs = getVisibleJobs(jobs, selectedExperience);
-
-  const enrichJobsWithExperience = useCallback(
-    async (jobsToEnrich: JobResult[]) => {
-      if (isExperienceLookupInProgress.current) {
-        return;
-      }
-
-      const jobsMissingExperience = jobsToEnrich.filter((job) => {
-        return job.descriptionText && !job.yearsOfExperience;
-      });
-
-      if (!jobsMissingExperience.length) {
-        return;
-      }
-
-      isExperienceLookupInProgress.current = true;
-
-      try {
-        let nextJobs = jobsToEnrich;
-
-        for (const job of jobsMissingExperience) {
-          if (!job.descriptionText) {
-            continue;
-          }
-
-          const yearsOfExperience = await getJobExperience(job.descriptionText);
-
-          nextJobs = nextJobs.map((currentJob) =>
-            currentJob.id === job.id
-              ? { ...currentJob, yearsOfExperience }
-              : currentJob,
-          );
-
-          setJobs(rehydrateJobs(nextJobs));
-
-          const updatedJob = nextJobs.find((currentJob) => {
-            return currentJob.id === job.id;
-          });
-
-          if (updatedJob) {
-            void saveJobsToSupabase({
-              jobs: [updatedJob],
-              hiddenJobs: [],
-            }).catch((error: unknown) => {
-              setErrorMessage(getErrorMessage(error));
-            });
-          }
-        }
-      } catch (error) {
-        setErrorMessage(getErrorMessage(error));
-      } finally {
-        isExperienceLookupInProgress.current = false;
-      }
-    },
-    [],
-  );
-
-  const loadJobs = useCallback(async (
-    options: {
-      force?: boolean;
-      postedWithin?: PostedWithin;
-      replaceVisible?: boolean;
-    } = {},
-  ) => {
-    if (isSearchInProgress.current) {
-      return;
-    }
-
-    isSearchInProgress.current = true;
-    setIsLoading(true);
-    setErrorMessage(undefined);
-
-    try {
-      const savedJobs = await readSavedJobs();
-
-      if (savedJobs) {
-        setJobs(rehydrateJobs(savedJobs.jobs));
-        setHiddenJobs(rehydrateJobs(savedJobs.hiddenJobs));
-        setLastUpdatedAt(new Date(savedJobs.fetchedAt));
-      }
-
-      if (savedJobs && !options.force && !isSavedJobsStale(savedJobs)) {
-        return;
-      }
-
-      setIsFetchingJobs(true);
-      const results = await searchWideNetJobs({
-        count: jobsFetchLimit,
-          postedWithin: options.postedWithin ?? getPostedWithinForSavedJobs(savedJobs),
-      });
-      const fetchedAt = Date.now();
-      const hiddenJobIds = new Set(savedJobs?.hiddenJobs.map((job) => job.id));
-      const nextJobs = mergeJobs(
-        normalizeJobs(results),
-        options.replaceVisible ? [] : savedJobs?.jobs ?? [],
-      ).filter((job) => !hiddenJobIds.has(job.id));
-      const nextHiddenJobs = savedJobs?.hiddenJobs ?? [];
-
-      setJobs(rehydrateJobs(nextJobs));
-      setHiddenJobs(rehydrateJobs(nextHiddenJobs));
-      setLastUpdatedAt(new Date(fetchedAt));
-      void saveJobsToSupabase({
-        jobs: nextJobs,
-        hiddenJobs: nextHiddenJobs,
-        replaceVisible: options.replaceVisible,
-      }).catch((error: unknown) => {
-        setErrorMessage(getErrorMessage(error));
-      });
-      void enrichJobsWithExperience(nextJobs);
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error));
-    } finally {
-      setIsFetchingJobs(false);
-      isSearchInProgress.current = false;
-      setIsLoading(false);
-    }
-  }, [enrichJobsWithExperience]);
-
-  const hideJob = useCallback(
-    (jobToHide: JobResult) => {
-      const nextJobs = jobs.filter((job) => job.id !== jobToHide.id);
-      const nextHiddenJob = { ...jobToHide, hiddenAt: Date.now() };
-      const nextHiddenJobs = mergeJobs(
-        [nextHiddenJob],
-        hiddenJobs,
-      );
-
-      setJobs(rehydrateJobs(nextJobs));
-      setHiddenJobs(rehydrateJobs(nextHiddenJobs));
-      void saveJobsToSupabase({
-        jobs: [],
-        hiddenJobs: [nextHiddenJob],
-      }).catch((error: unknown) => {
-        setErrorMessage(getErrorMessage(error));
-      });
-    },
-    [hiddenJobs, jobs],
-  );
-
-  useEffect(() => {
-    const initialLoadId = window.setTimeout(() => {
-      void loadJobs();
-    }, 0);
-
-    const intervalId = window.setInterval(() => {
-      void loadJobs();
-    }, refreshIntervalMs);
-
-    return () => {
-      window.clearTimeout(initialLoadId);
-      window.clearInterval(intervalId);
-    };
-  }, [loadJobs]);
+  const {
+    jobs,
+    hiddenJobs,
+    visibleJobs,
+    experienceFilters,
+    selectedExperience,
+    setSelectedExperience,
+    isLoading,
+    isFetchingJobs,
+    errorMessage,
+    lastUpdatedAt,
+    loadJobs,
+    hideJob,
+  } = useJobs();
 
   return (
     <section className="w-full py-10">
@@ -643,10 +455,7 @@ function JobCards({
   return (
     <div className="flex flex-col gap-2">
       {jobs.map((job) => (
-        <article
-          key={job.id}
-          className="border bg-background p-3"
-        >
+        <article key={job.id} className="border bg-background p-3">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <h3 className="truncate text-sm font-semibold">{job.title}</h3>
@@ -659,7 +468,10 @@ function JobCards({
 
           <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
             <JobCardField label="Location" value={job.location} />
-            <JobCardField label="Experience" value={getJobExperienceText(job)} />
+            <JobCardField
+              label="Experience"
+              value={getJobExperienceText(job)}
+            />
           </div>
 
           <div className="mt-4 flex items-center justify-start gap-2">
@@ -729,158 +541,6 @@ function PostedAtLabel({ job }: { job: JobResult }) {
   );
 }
 
-function normalizeJobs(results: unknown) {
-  if (!Array.isArray(results)) {
-    return [];
-  }
-
-  return results.map((result, index) => normalizeJob(result, index));
-}
-
-function normalizeJob(result: unknown, index: number): JobResult {
-  const job = isRecord(result) ? result : {};
-  const title = getFirstString(job, ["title", "jobTitle", "position"]);
-  const company = getFirstString(job, [
-    "companyName",
-    "company",
-    "companyTitle",
-  ]);
-  const location = getLocationLabel(
-    getFirstString(job, ["location", "formattedLocation"]),
-  );
-  const postedAtTimestamp = getPostedAtTimestamp(job);
-  const linkedInJobId = getFirstString(job, ["id", "jobId", "linkedinJobId"]);
-  const linkedInUrl = getFirstString(job, [
-    "linkedInUrl",
-    "linkedinUrl",
-    "link",
-    "jobUrl",
-    "url",
-  ]);
-  const descriptionText = getFirstString(job, [
-    "descriptionText",
-    "description",
-    "jobDescription",
-  ]);
-  const applyUrl = getFirstString(job, [
-    "applyUrl",
-    "applicationUrl",
-    "jobUrl",
-    "url",
-    "link",
-  ]);
-  const yearsOfExperience = getFirstString(job, [
-    "yearsOfExperience",
-    "years_of_experience",
-  ]);
-  const hiddenAt = getFirstNumber(job, ["hiddenAt", "hidden_at"]);
-  const id = linkedInJobId ?? applyUrl;
-
-  return {
-    id: id ?? `job-${index}`,
-    title: title ?? "Untitled role",
-    postedAt: formatPostedAt(postedAtTimestamp),
-    postedAtTimestamp,
-    company: company ?? "Unknown company",
-    location,
-    descriptionText,
-    yearsOfExperience,
-    linkedInUrl: linkedInUrl ?? getLinkedInJobUrlFromId(linkedInJobId),
-    applyUrl,
-    hiddenAt,
-  };
-}
-
-function getPostedAtTimestamp(job: Record<string, unknown>) {
-  const postedAtTimestamp = getFirstNumber(job, ["postedAtTimestamp"]);
-  const postedAt = getFirstString(job, [
-    "postedAt",
-    "postedDate",
-    "postedTime",
-    "timePosted",
-    "listedAt",
-  ]);
-
-  return getTimestamp(postedAtTimestamp ?? postedAt);
-}
-
-function getFirstString(record: Record<string, unknown>, keys: string[]) {
-  for (const key of keys) {
-    const value = record[key];
-
-    if (typeof value === "string" && value.trim()) {
-      return value.trim();
-    }
-  }
-
-  return undefined;
-}
-
-function getLocationLabel(location: string | undefined) {
-  if (!location) {
-    return "Unknown";
-  }
-
-  const locationParts = location
-    .split(",")
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  if (locationParts.length >= 2) {
-    return `${locationParts[0]}, ${locationParts[1]}`;
-  }
-
-  return locationParts[0] ?? "Unknown";
-}
-
-function getFirstNumber(record: Record<string, unknown>, keys: string[]) {
-  for (const key of keys) {
-    const value = record[key];
-
-    if (typeof value === "number" && Number.isFinite(value)) {
-      return value;
-    }
-  }
-
-  return undefined;
-}
-
-function getTimestamp(value: number | string | undefined) {
-  if (!value) {
-    return undefined;
-  }
-
-  const timestamp = new Date(value).getTime();
-
-  return Number.isNaN(timestamp) ? undefined : timestamp;
-}
-
-function formatPostedAt(timestamp: number | undefined) {
-  if (!timestamp) {
-    return "Unknown";
-  }
-
-  const elapsedMs = Date.now() - timestamp;
-
-  if (elapsedMs < 0) {
-    return "Unknown";
-  }
-
-  const elapsedHours = Math.floor(elapsedMs / (1000 * 60 * 60));
-
-  if (elapsedHours < 1) {
-    return "Less than 1 hour ago";
-  }
-
-  if (elapsedHours < 24) {
-    return `${elapsedHours} ${elapsedHours === 1 ? "hour" : "hours"} ago`;
-  }
-
-  const elapsedDays = Math.floor(elapsedHours / 24);
-
-  return `${elapsedDays} ${elapsedDays === 1 ? "day" : "days"} ago`;
-}
-
 function getTableCaption({
   isLoading,
   jobs,
@@ -905,152 +565,4 @@ function getTableCaption({
   }
 
   return `Showing ${jobs.length} jobs. Last updated ${lastUpdatedAt.toLocaleTimeString()}.`;
-}
-
-function getExperienceFilters(jobsToFilter: JobResult[]) {
-  const filters = new Map<string, number>([["All", jobsToFilter.length]]);
-
-  for (const job of jobsToFilter) {
-    const label = getExperienceLabel(job);
-    filters.set(label, (filters.get(label) ?? 0) + 1);
-  }
-
-  return Array.from(filters, ([label, count]) => ({ label, count })).sort(
-    sortExperienceFilters,
-  );
-}
-
-function getVisibleJobs(jobsToFilter: JobResult[], selectedExperience: string) {
-  if (selectedExperience === "All") {
-    return jobsToFilter;
-  }
-
-  return jobsToFilter.filter((job) => {
-    return getExperienceLabel(job) === selectedExperience;
-  });
-}
-
-function getExperienceLabel(job: JobResult) {
-  return job.yearsOfExperience ?? "Not checked";
-}
-
-function getJobExperienceText(job: JobResult) {
-  return job.yearsOfExperience ?? (job.descriptionText ? "Checking..." : "Not checked");
-}
-
-function sortExperienceFilters(
-  firstFilter: { label: string },
-  secondFilter: { label: string },
-) {
-  return (
-    getExperienceFilterIndex(firstFilter.label) -
-    getExperienceFilterIndex(secondFilter.label)
-  );
-}
-
-function getExperienceFilterIndex(label: string) {
-  const index = experienceFilterOrder.indexOf(label);
-
-  return index === -1 ? experienceFilterOrder.length : index;
-}
-
-async function readSavedJobs(): Promise<SavedJobs | undefined> {
-  const savedJobs = await getJobsFromSupabase();
-  const jobs = pruneOldJobs(normalizeJobs(savedJobs.jobs));
-  const hiddenJobs = pruneOldJobs(normalizeJobs(savedJobs.hiddenJobs));
-
-  if (!jobs.length && !hiddenJobs.length) {
-    return undefined;
-  }
-
-  return {
-    fetchedAt: savedJobs.fetchedAt,
-    jobs,
-    hiddenJobs,
-  };
-}
-
-function pruneOldJobs(jobsToPrune: JobResult[]) {
-  const oldestAllowedTimestamp = Date.now() - monthMs;
-
-  return jobsToPrune.filter((job) => {
-    return (
-      !job.postedAtTimestamp || job.postedAtTimestamp >= oldestAllowedTimestamp
-    );
-  });
-}
-
-function isSavedJobsStale(savedJobs: SavedJobs) {
-  return Date.now() - savedJobs.fetchedAt >= refreshIntervalMs;
-}
-
-function getPostedWithinForSavedJobs(
-  savedJobs: SavedJobs | undefined,
-): PostedWithin {
-  if (!savedJobs) {
-    return "month";
-  }
-
-  const cacheAge = Date.now() - savedJobs.fetchedAt;
-
-  if (cacheAge <= dayMs) {
-    return "day";
-  }
-
-  if (cacheAge <= weekMs) {
-    return "week";
-  }
-
-  return "month";
-}
-
-function mergeJobs(newJobs: JobResult[], cachedJobs: JobResult[]) {
-  const jobsById = new Map<string, JobResult>();
-
-  for (const job of [...newJobs, ...cachedJobs]) {
-    if (!jobsById.has(job.id)) {
-      jobsById.set(job.id, job);
-    }
-  }
-
-  return Array.from(jobsById.values()).sort(sortJobsByPostedAt);
-}
-
-function sortJobsByPostedAt(firstJob: JobResult, secondJob: JobResult) {
-  return (secondJob.postedAtTimestamp ?? 0) - (firstJob.postedAtTimestamp ?? 0);
-}
-
-function rehydrateJobs(jobs: JobResult[]) {
-  return jobs.map((job) => ({
-    ...job,
-    location: job.location ?? "Unknown",
-    linkedInUrl: job.linkedInUrl ?? getLinkedInJobUrlFromId(job.id),
-    postedAt: formatPostedAt(job.postedAtTimestamp),
-  }));
-}
-
-function isFreshJob(job: JobResult) {
-  if (!job.postedAtTimestamp) {
-    return false;
-  }
-
-  const elapsedMs = Date.now() - job.postedAtTimestamp;
-
-  return elapsedMs >= 0 && elapsedMs <= dayMs;
-}
-
-function getLinkedInJobUrlFromId(id: string | undefined) {
-  if (!id || id.startsWith("http")) {
-    return undefined;
-  }
-
-  return `https://www.linkedin.com/jobs/view/${id}`;
-}
-
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Job search failed";
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

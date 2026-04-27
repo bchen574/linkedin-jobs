@@ -1,0 +1,147 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import {
+  enrichJobsWithExperience,
+  hideJob as hideJobData,
+  loadJobsData,
+} from "@/lib/jobs/api";
+import {
+  getExperienceFilters,
+  getVisibleJobs,
+} from "@/lib/jobs/filters";
+import { rehydrateJobs } from "@/lib/jobs/transforms";
+import type { JobResult, LoadJobsOptions, SavedJobs } from "@/lib/jobs/types";
+
+const refreshIntervalMs = 2 * 60 * 60 * 1000;
+
+export function useJobs() {
+  const [jobs, setJobs] = useState<JobResult[]>([]);
+  const [hiddenJobs, setHiddenJobs] = useState<JobResult[]>([]);
+  const [errorMessage, setErrorMessage] = useState<string>();
+  const [isLoading, setIsLoading] = useState(true);
+  const [isFetchingJobs, setIsFetchingJobs] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date>();
+  const [selectedExperience, setSelectedExperience] = useState("All");
+  const isSearchInProgress = useRef(false);
+  const isExperienceLookupInProgress = useRef(false);
+  const experienceFilters = getExperienceFilters(jobs);
+  const visibleJobs = getVisibleJobs(jobs, selectedExperience);
+
+  const setSavedJobs = useCallback((savedJobs: SavedJobs) => {
+    setJobs(rehydrateJobs(savedJobs.jobs));
+    setHiddenJobs(rehydrateJobs(savedJobs.hiddenJobs));
+    setLastUpdatedAt(new Date(savedJobs.fetchedAt));
+  }, []);
+
+  const enrichVisibleJobsWithExperience = useCallback(
+    async (jobsToEnrich: JobResult[]) => {
+      if (isExperienceLookupInProgress.current) {
+        return;
+      }
+
+      isExperienceLookupInProgress.current = true;
+
+      try {
+        await enrichJobsWithExperience({
+          jobs: jobsToEnrich,
+          onJobsUpdated: setJobs,
+          onError: (error) => setErrorMessage(getErrorMessage(error)),
+        });
+      } catch (error) {
+        setErrorMessage(getErrorMessage(error));
+      } finally {
+        isExperienceLookupInProgress.current = false;
+      }
+    },
+    [],
+  );
+
+  const loadJobs = useCallback(
+    async (options: LoadJobsOptions = {}) => {
+      if (isSearchInProgress.current) {
+        return;
+      }
+
+      isSearchInProgress.current = true;
+      setIsLoading(true);
+      setErrorMessage(undefined);
+
+      try {
+        const loadedJobs = await loadJobsData({
+          options,
+          onSavedJobs: setSavedJobs,
+          onFetchStart: () => setIsFetchingJobs(true),
+          onError: (error) => setErrorMessage(getErrorMessage(error)),
+        });
+
+        if (!loadedJobs) {
+          return;
+        }
+
+        setSavedJobs(loadedJobs);
+
+        if (loadedJobs.shouldEnrichExperience) {
+          void enrichVisibleJobsWithExperience(loadedJobs.jobs);
+        }
+      } catch (error) {
+        setErrorMessage(getErrorMessage(error));
+      } finally {
+        setIsFetchingJobs(false);
+        isSearchInProgress.current = false;
+        setIsLoading(false);
+      }
+    },
+    [enrichVisibleJobsWithExperience, setSavedJobs],
+  );
+
+  const hideJob = useCallback(
+    (jobToHide: JobResult) => {
+      const nextSavedJobs = hideJobData({
+        jobToHide,
+        jobs,
+        hiddenJobs,
+        onError: (error) => setErrorMessage(getErrorMessage(error)),
+      });
+
+      setJobs(rehydrateJobs(nextSavedJobs.jobs));
+      setHiddenJobs(rehydrateJobs(nextSavedJobs.hiddenJobs));
+    },
+    [hiddenJobs, jobs],
+  );
+
+  useEffect(() => {
+    const initialLoadId = window.setTimeout(() => {
+      void loadJobs();
+    }, 0);
+
+    const intervalId = window.setInterval(() => {
+      void loadJobs();
+    }, refreshIntervalMs);
+
+    return () => {
+      window.clearTimeout(initialLoadId);
+      window.clearInterval(intervalId);
+    };
+  }, [loadJobs]);
+
+  return {
+    jobs,
+    hiddenJobs,
+    visibleJobs,
+    experienceFilters,
+    selectedExperience,
+    setSelectedExperience,
+    isLoading,
+    isFetchingJobs,
+    errorMessage,
+    lastUpdatedAt,
+    loadJobs,
+    hideJob,
+  };
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Job search failed";
+}
