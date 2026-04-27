@@ -48,6 +48,7 @@ export function normalizeJob(result: unknown, index: number): JobResult {
     "years_of_experience",
   ]);
   const hiddenAt = getFirstNumber(job, ["hiddenAt", "hidden_at"]);
+  const applied = getFirstBoolean(job, ["applied"]);
   const id = linkedInJobId ?? applyUrl;
 
   return {
@@ -62,6 +63,7 @@ export function normalizeJob(result: unknown, index: number): JobResult {
     linkedInUrl: linkedInUrl ?? getLinkedInJobUrlFromId(linkedInJobId),
     applyUrl,
     hiddenAt,
+    applied,
   };
 }
 
@@ -179,6 +181,18 @@ function getFirstNumber(record: Record<string, unknown>, keys: string[]) {
     const value = record[key];
 
     if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function getFirstBoolean(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = record[key];
+
+    if (typeof value === "boolean") {
       return value;
     }
   }

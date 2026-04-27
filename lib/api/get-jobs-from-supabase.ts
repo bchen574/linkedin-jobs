@@ -11,6 +11,7 @@ export async function getJobsFromSupabase() {
 
   return {
     jobs: Array.isArray(body.jobs) ? body.jobs : [],
+    appliedJobs: Array.isArray(body.appliedJobs) ? body.appliedJobs : [],
     hiddenJobs: Array.isArray(body.hiddenJobs) ? body.hiddenJobs : [],
     fetchedAt: typeof body.fetchedAt === "number" ? body.fetchedAt : 0,
   };

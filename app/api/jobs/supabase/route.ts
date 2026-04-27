@@ -1,5 +1,6 @@
 type SaveJobsRequest = {
   jobs?: unknown;
+  appliedJobs?: unknown;
   hiddenJobs?: unknown;
   replaceVisible?: unknown;
 };
@@ -15,7 +16,10 @@ export async function GET() {
     process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !supabaseSecretKey) {
-    return Response.json({ jobs: [], hiddenJobs: [] }, { status: 200 });
+    return Response.json(
+      { jobs: [], appliedJobs: [], hiddenJobs: [] },
+      { status: 200 },
+    );
   }
 
   try {
@@ -53,8 +57,9 @@ export async function POST(request: Request) {
     const input = (await request.json()) as SaveJobsRequest;
     const tableName = process.env.SUPABASE_JOBS_TABLE ?? defaultTableName;
     const rows = [
-      ...getRows(input.jobs, false),
-      ...getRows(input.hiddenJobs, true),
+      ...getRows(input.jobs, { hidden: false, applied: false }),
+      ...getRows(input.appliedJobs, { hidden: false, applied: true }),
+      ...getRows(input.hiddenJobs, { hidden: true, applied: false }),
     ];
 
     if (input.replaceVisible === true) {
@@ -102,6 +107,7 @@ async function deleteVisibleRows({
   const url = new URL(`/rest/v1/${tableName}`, supabaseUrl);
 
   url.searchParams.set("hidden", "eq.false");
+  url.searchParams.set("applied", "eq.false");
 
   const response = await fetch(url, {
     method: "DELETE",
@@ -191,20 +197,33 @@ type JobRow = {
   linkedin_url: string | null;
   apply_url: string | null;
   hidden: boolean;
+  applied: boolean;
   hidden_at: string | null;
   data: JobRowInput;
   updated_at: string;
 };
 
-function getRows(value: unknown, hidden: boolean) {
+function getRows(
+  value: unknown,
+  status: {
+    hidden: boolean;
+    applied: boolean;
+  },
+) {
   if (!Array.isArray(value)) {
     return [];
   }
 
-  return value.filter(isRecord).map((job) => getRow(job, hidden));
+  return value.filter(isRecord).map((job) => getRow(job, status));
 }
 
-function getRow(job: JobRowInput, hidden: boolean): JobRow {
+function getRow(
+  job: JobRowInput,
+  status: {
+    hidden: boolean;
+    applied: boolean;
+  },
+): JobRow {
   const postedAtTimestamp = getNumberValue(job.postedAtTimestamp);
   const hiddenAtTimestamp = getNumberValue(job.hiddenAt);
 
@@ -218,7 +237,8 @@ function getRow(job: JobRowInput, hidden: boolean): JobRow {
     years_of_experience: getStringValue(job.yearsOfExperience) ?? null,
     linkedin_url: getStringValue(job.linkedInUrl) ?? null,
     apply_url: getStringValue(job.applyUrl) ?? null,
-    hidden,
+    hidden: status.hidden,
+    applied: status.applied,
     hidden_at: getDateValue(hiddenAtTimestamp),
     data: job,
     updated_at: new Date().toISOString(),
@@ -227,6 +247,7 @@ function getRow(job: JobRowInput, hidden: boolean): JobRow {
 
 function getJobsResponse(rows: Record<string, unknown>[]) {
   const jobs: JobRowInput[] = [];
+  const appliedJobs: JobRowInput[] = [];
   const hiddenJobs: JobRowInput[] = [];
 
   for (const row of rows) {
@@ -234,12 +255,14 @@ function getJobsResponse(rows: Record<string, unknown>[]) {
 
     if (row.hidden === true) {
       hiddenJobs.push(job);
+    } else if (row.applied === true) {
+      appliedJobs.push(job);
     } else {
       jobs.push(job);
     }
   }
 
-  return { jobs, hiddenJobs, fetchedAt: getLatestUpdatedAt(rows) };
+  return { jobs, appliedJobs, hiddenJobs, fetchedAt: getLatestUpdatedAt(rows) };
 }
 
 function getJobFromRow(row: Record<string, unknown>) {
@@ -263,6 +286,7 @@ function getJobFromRow(row: Record<string, unknown>) {
     applyUrl: getStringValue(row.apply_url) ?? getStringValue(data.applyUrl),
     hiddenAt:
       getTimestampValue(row.hidden_at) ?? getNumberValue(data.hiddenAt),
+    applied: getBooleanValue(row.applied) ?? getBooleanValue(data.applied),
   };
 }
 
@@ -310,6 +334,10 @@ function getStringValue(value: unknown) {
 
 function getNumberValue(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function getBooleanValue(value: unknown) {
+  return typeof value === "boolean" ? value : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

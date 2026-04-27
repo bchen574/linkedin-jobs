@@ -12,11 +12,13 @@ export type JobResult = {
   linkedInUrl?: string;
   applyUrl?: string;
   hiddenAt?: number;
+  applied?: boolean;
 };
 
 export type SavedJobs = {
   fetchedAt: number;
   jobs: JobResult[];
+  appliedJobs: JobResult[];
   hiddenJobs: JobResult[];
 };
 

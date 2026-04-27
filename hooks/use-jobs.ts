@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
+  applyJob as applyJobData,
   enrichJobsWithExperience,
   hideJob as hideJobData,
   loadJobsData,
@@ -18,6 +19,7 @@ const refreshIntervalMs = 2 * 60 * 60 * 1000;
 
 export function useJobs() {
   const [jobs, setJobs] = useState<JobResult[]>([]);
+  const [appliedJobs, setAppliedJobs] = useState<JobResult[]>([]);
   const [hiddenJobs, setHiddenJobs] = useState<JobResult[]>([]);
   const [errorMessage, setErrorMessage] = useState<string>();
   const [isLoading, setIsLoading] = useState(true);
@@ -31,6 +33,7 @@ export function useJobs() {
 
   const setSavedJobs = useCallback((savedJobs: SavedJobs) => {
     setJobs(rehydrateJobs(savedJobs.jobs));
+    setAppliedJobs(rehydrateJobs(savedJobs.appliedJobs));
     setHiddenJobs(rehydrateJobs(savedJobs.hiddenJobs));
     setLastUpdatedAt(new Date(savedJobs.fetchedAt));
   }, []);
@@ -101,14 +104,31 @@ export function useJobs() {
       const nextSavedJobs = hideJobData({
         jobToHide,
         jobs,
+        appliedJobs,
         hiddenJobs,
         onError: (error) => setErrorMessage(getErrorMessage(error)),
       });
 
       setJobs(rehydrateJobs(nextSavedJobs.jobs));
+      setAppliedJobs(rehydrateJobs(nextSavedJobs.appliedJobs));
       setHiddenJobs(rehydrateJobs(nextSavedJobs.hiddenJobs));
     },
-    [hiddenJobs, jobs],
+    [appliedJobs, hiddenJobs, jobs],
+  );
+
+  const applyJob = useCallback(
+    (jobToApply: JobResult) => {
+      const nextSavedJobs = applyJobData({
+        jobToApply,
+        jobs,
+        appliedJobs,
+        onError: (error) => setErrorMessage(getErrorMessage(error)),
+      });
+
+      setJobs(rehydrateJobs(nextSavedJobs.jobs));
+      setAppliedJobs(rehydrateJobs(nextSavedJobs.appliedJobs));
+    },
+    [appliedJobs, jobs],
   );
 
   useEffect(() => {
@@ -128,6 +148,7 @@ export function useJobs() {
 
   return {
     jobs,
+    appliedJobs,
     hiddenJobs,
     visibleJobs,
     experienceFilters,
@@ -139,6 +160,7 @@ export function useJobs() {
     lastUpdatedAt,
     loadJobs,
     hideJob,
+    applyJob,
   };
 }
 

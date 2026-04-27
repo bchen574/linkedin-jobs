@@ -53,14 +53,17 @@ export async function loadJobsData({
   });
   const fetchedAt = Date.now();
   const hiddenJobIds = new Set(savedJobs?.hiddenJobs.map((job) => job.id));
+  const appliedJobIds = new Set(savedJobs?.appliedJobs.map((job) => job.id));
   const jobs = mergeJobs(
     normalizeJobs(results),
     options.replaceVisible ? [] : (savedJobs?.jobs ?? []),
-  ).filter((job) => !hiddenJobIds.has(job.id));
+  ).filter((job) => !hiddenJobIds.has(job.id) && !appliedJobIds.has(job.id));
+  const appliedJobs = savedJobs?.appliedJobs ?? [];
   const hiddenJobs = savedJobs?.hiddenJobs ?? [];
 
   void saveJobsToSupabase({
     jobs,
+    appliedJobs,
     hiddenJobs,
     replaceVisible: options.replaceVisible,
   }).catch(onError);
@@ -68,6 +71,7 @@ export async function loadJobsData({
   return {
     fetchedAt,
     jobs,
+    appliedJobs,
     hiddenJobs,
     shouldEnrichExperience: true,
   };
@@ -114,6 +118,7 @@ export async function enrichJobsWithExperience({
     if (updatedJob) {
       void saveJobsToSupabase({
         jobs: [updatedJob],
+        appliedJobs: [],
         hiddenJobs: [],
       }).catch(onError);
     }
@@ -123,41 +128,75 @@ export async function enrichJobsWithExperience({
 export function hideJob({
   jobToHide,
   jobs,
+  appliedJobs,
   hiddenJobs,
   onError,
 }: {
   jobToHide: JobResult;
   jobs: JobResult[];
+  appliedJobs: JobResult[];
   hiddenJobs: JobResult[];
   onError: (error: unknown) => void;
 }) {
   const nextJobs = jobs.filter((job) => job.id !== jobToHide.id);
+  const nextAppliedJobs = appliedJobs.filter((job) => job.id !== jobToHide.id);
   const nextHiddenJob = { ...jobToHide, hiddenAt: Date.now() };
   const nextHiddenJobs = mergeJobs([nextHiddenJob], hiddenJobs);
 
   void saveJobsToSupabase({
     jobs: [],
+    appliedJobs: [],
     hiddenJobs: [nextHiddenJob],
   }).catch(onError);
 
   return {
     jobs: nextJobs,
+    appliedJobs: nextAppliedJobs,
     hiddenJobs: nextHiddenJobs,
+  };
+}
+
+export function applyJob({
+  jobToApply,
+  jobs,
+  appliedJobs,
+  onError,
+}: {
+  jobToApply: JobResult;
+  jobs: JobResult[];
+  appliedJobs: JobResult[];
+  onError: (error: unknown) => void;
+}) {
+  const nextJobs = jobs.filter((job) => job.id !== jobToApply.id);
+  const nextAppliedJob = { ...jobToApply, applied: true };
+  const nextAppliedJobs = mergeJobs([nextAppliedJob], appliedJobs);
+
+  void saveJobsToSupabase({
+    jobs: [],
+    appliedJobs: [nextAppliedJob],
+    hiddenJobs: [],
+  }).catch(onError);
+
+  return {
+    jobs: nextJobs,
+    appliedJobs: nextAppliedJobs,
   };
 }
 
 async function readSavedJobs(): Promise<SavedJobs | undefined> {
   const savedJobs = await getJobsFromSupabase();
   const jobs = pruneOldJobs(normalizeJobs(savedJobs.jobs));
+  const appliedJobs = normalizeJobs(savedJobs.appliedJobs);
   const hiddenJobs = pruneOldJobs(normalizeJobs(savedJobs.hiddenJobs));
 
-  if (!jobs.length && !hiddenJobs.length) {
+  if (!jobs.length && !appliedJobs.length && !hiddenJobs.length) {
     return undefined;
   }
 
   return {
     fetchedAt: savedJobs.fetchedAt,
     jobs,
+    appliedJobs,
     hiddenJobs,
   };
 }

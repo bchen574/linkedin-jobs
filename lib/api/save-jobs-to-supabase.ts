@@ -9,10 +9,12 @@ type SupabaseJob = {
   linkedInUrl?: string;
   applyUrl?: string;
   hiddenAt?: number;
+  applied?: boolean;
 };
 
 type SaveJobsInput = {
   jobs: SupabaseJob[];
+  appliedJobs: SupabaseJob[];
   hiddenJobs: SupabaseJob[];
   replaceVisible?: boolean;
 };

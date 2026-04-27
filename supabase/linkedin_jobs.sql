@@ -8,6 +8,7 @@ create table if not exists public.linkedin_jobs (
   years_of_experience text,
   linkedin_url text,
   apply_url text,
+  applied boolean not null default false,
   hidden boolean not null default false,
   hidden_at timestamptz,
   data jsonb not null default '{}'::jsonb,
@@ -19,6 +20,9 @@ create index if not exists linkedin_jobs_posted_at_idx
 
 create index if not exists linkedin_jobs_hidden_idx
   on public.linkedin_jobs (hidden);
+
+create index if not exists linkedin_jobs_applied_idx
+  on public.linkedin_jobs (applied);
 
 create index if not exists linkedin_jobs_years_of_experience_idx
   on public.linkedin_jobs (years_of_experience);

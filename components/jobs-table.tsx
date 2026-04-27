@@ -1,6 +1,11 @@
 "use client";
 
-import { ArrowClockwise, ArrowSquareOut } from "@phosphor-icons/react";
+import {
+  ArrowClockwise,
+  ArrowSquareOut,
+  CaretDown,
+} from "@phosphor-icons/react";
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 
 import { useJobs } from "@/hooks/use-jobs";
@@ -19,6 +24,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -35,6 +41,7 @@ const maxEstimatedProgress = 95;
 export function JobsTable() {
   const {
     jobs,
+    appliedJobs,
     hiddenJobs,
     visibleJobs,
     experienceFilters,
@@ -46,7 +53,10 @@ export function JobsTable() {
     lastUpdatedAt,
     loadJobs,
     hideJob,
+    applyJob,
   } = useJobs();
+  const [isAppliedJobsOpen, setIsAppliedJobsOpen] = useState(false);
+  const [isHiddenJobsOpen, setIsHiddenJobsOpen] = useState(false);
 
   return (
     <section className="w-full py-10">
@@ -136,6 +146,7 @@ export function JobsTable() {
             jobs={visibleJobs}
             isLoading={isLoading}
             emptyMessage="No jobs found."
+            onApply={applyJob}
             onHide={hideJob}
           />
           <p className="mt-3 text-center text-xs text-muted-foreground">
@@ -151,11 +162,12 @@ export function JobsTable() {
         <div className="hidden bg-background md:block">
           <Table className="table-fixed">
             <colgroup>
-              <col className="w-[calc((100%_-_16.5rem)_/_5)]" />
-              <col className="w-[calc((100%_-_16.5rem)_/_5)]" />
-              <col className="w-[calc((100%_-_16.5rem)_/_5)]" />
-              <col className="w-[calc((100%_-_16.5rem)_/_5)]" />
-              <col className="w-[calc((100%_-_16.5rem)_/_5)]" />
+              <col className="w-[calc((100%_-_21.5rem)_/_5)]" />
+              <col className="w-[calc((100%_-_21.5rem)_/_5)]" />
+              <col className="w-[calc((100%_-_21.5rem)_/_5)]" />
+              <col className="w-[calc((100%_-_21.5rem)_/_5)]" />
+              <col className="w-[calc((100%_-_21.5rem)_/_5)]" />
+              <col className="w-20" />
               <col className="w-10" />
               <col className="w-32" />
               <col className="w-24" />
@@ -175,6 +187,7 @@ export function JobsTable() {
                 <TableHead>Company</TableHead>
                 <TableHead>Location</TableHead>
                 <TableHead>Experience</TableHead>
+                <TableHead className="w-20 text-center">Applied</TableHead>
                 <TableHead className="w-10 text-center">Post</TableHead>
                 <TableHead className="w-32 text-right">Apply</TableHead>
                 <TableHead className="w-24 text-right">Hide</TableHead>
@@ -204,6 +217,18 @@ export function JobsTable() {
                   <TableCell className="truncate text-muted-foreground">
                     {job.yearsOfExperience ??
                       (job.descriptionText ? "Checking..." : "Not checked")}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Checkbox
+                      checked={Boolean(job.applied)}
+                      onCheckedChange={(checked) => {
+                        if (checked === true) {
+                          applyJob(job);
+                        }
+                      }}
+                      aria-label={`Mark ${job.title} as applied`}
+                      className="mx-auto"
+                    />
                   </TableCell>
                   <TableCell className="text-center">
                     {job.linkedInUrl ? (
@@ -255,7 +280,7 @@ export function JobsTable() {
               {!jobs.length ? (
                 <TableRow>
                   <TableCell
-                    colSpan={8}
+                    colSpan={9}
                     className="h-28 text-center text-muted-foreground"
                   >
                     {isLoading ? "Loading jobs..." : "No jobs found."}
@@ -266,15 +291,139 @@ export function JobsTable() {
           </Table>
         </div>
 
-        <div className="mt-6 flex flex-col gap-3">
-          <div>
-            <h2 className="text-xl font-semibold tracking-normal">
-              Hidden jobs
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Results you have hidden stay out of the main list.
+        <CollapsibleJobsSection
+          title="Applied jobs"
+          description="Jobs you have marked as applied stay out of the main list."
+          isOpen={isAppliedJobsOpen}
+          onOpenChange={setIsAppliedJobsOpen}
+        >
+          <div className="md:hidden">
+            <JobCards
+              jobs={appliedJobs}
+              isLoading={false}
+              emptyMessage="Applied jobs will appear here."
+            />
+            <p className="mt-3 text-center text-xs text-muted-foreground">
+              {appliedJobs.length
+                ? `${appliedJobs.length} applied jobs.`
+                : "No applied jobs."}
             </p>
           </div>
+          <div className="hidden bg-background md:block">
+            <Table className="table-fixed">
+              <colgroup>
+                <col className="w-[calc((100%_-_15.5rem)_/_5)]" />
+                <col className="w-[calc((100%_-_15.5rem)_/_5)]" />
+                <col className="w-[calc((100%_-_15.5rem)_/_5)]" />
+                <col className="w-[calc((100%_-_15.5rem)_/_5)]" />
+                <col className="w-[calc((100%_-_15.5rem)_/_5)]" />
+                <col className="w-20" />
+                <col className="w-10" />
+                <col className="w-32" />
+              </colgroup>
+              <TableCaption>
+                {appliedJobs.length
+                  ? `${appliedJobs.length} applied jobs.`
+                  : "No applied jobs."}
+              </TableCaption>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Job title</TableHead>
+                  <TableHead>Posted</TableHead>
+                  <TableHead>Company</TableHead>
+                  <TableHead>Location</TableHead>
+                  <TableHead>Experience</TableHead>
+                  <TableHead className="w-20 text-center">Applied</TableHead>
+                  <TableHead className="w-10 text-center">Post</TableHead>
+                  <TableHead className="w-32 text-right">Apply</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {appliedJobs.map((job) => (
+                  <TableRow key={job.id}>
+                    <TableCell className="truncate font-medium">
+                      {job.title}
+                    </TableCell>
+                    <TableCell className="truncate text-muted-foreground">
+                      {job.postedAt}
+                    </TableCell>
+                    <TableCell className="truncate">{job.company}</TableCell>
+                    <TableCell className="truncate text-muted-foreground">
+                      {job.location}
+                    </TableCell>
+                    <TableCell className="truncate text-muted-foreground">
+                      {job.yearsOfExperience ?? "Not checked"}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Checkbox
+                        checked
+                        disabled
+                        aria-label={`${job.title} is marked as applied`}
+                        className="mx-auto"
+                      />
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {job.linkedInUrl ? (
+                        <Button
+                          asChild
+                          size="icon-sm"
+                          variant="outline"
+                          className="mx-auto"
+                        >
+                          <a
+                            href={job.linkedInUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            aria-label={`Open LinkedIn post for ${job.title}`}
+                          >
+                            <ArrowSquareOut aria-hidden="true" weight="bold" />
+                          </a>
+                        </Button>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {job.applyUrl ? (
+                        <Button asChild size="sm">
+                          <a
+                            href={job.applyUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Apply
+                            <ArrowSquareOut aria-hidden="true" weight="bold" />
+                          </a>
+                        </Button>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">
+                          No link
+                        </span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {!appliedJobs.length ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={8}
+                      className="h-20 text-center text-muted-foreground"
+                    >
+                      Applied jobs will appear here.
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </TableBody>
+            </Table>
+          </div>
+        </CollapsibleJobsSection>
+
+        <CollapsibleJobsSection
+          title="Hidden jobs"
+          description="Results you have hidden stay out of the main list."
+          isOpen={isHiddenJobsOpen}
+          onOpenChange={setIsHiddenJobsOpen}
+        >
           <div className="md:hidden">
             <JobCards
               jobs={hiddenJobs}
@@ -384,7 +533,7 @@ export function JobsTable() {
               </TableBody>
             </Table>
           </div>
-        </div>
+        </CollapsibleJobsSection>
       </div>
     </section>
   );
@@ -433,15 +582,57 @@ function JobSearchProgress() {
   );
 }
 
+function CollapsibleJobsSection({
+  title,
+  description,
+  isOpen,
+  onOpenChange,
+  children,
+}: {
+  title: string;
+  description: string;
+  isOpen: boolean;
+  onOpenChange: (isOpen: boolean) => void;
+  children: ReactNode;
+}) {
+  return (
+    <section className="mt-6 flex flex-col gap-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold tracking-normal">{title}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+        </div>
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="outline"
+          onClick={() => onOpenChange(!isOpen)}
+          aria-expanded={isOpen}
+          aria-label={`${isOpen ? "Collapse" : "Expand"} ${title}`}
+        >
+          <CaretDown
+            aria-hidden="true"
+            className={isOpen ? "rotate-180" : undefined}
+            weight="bold"
+          />
+        </Button>
+      </div>
+      {isOpen ? children : null}
+    </section>
+  );
+}
+
 function JobCards({
   jobs,
   isLoading,
   emptyMessage,
+  onApply,
   onHide,
 }: {
   jobs: JobResult[];
   isLoading: boolean;
   emptyMessage: string;
+  onApply?: (job: JobResult) => void;
   onHide?: (job: JobResult) => void;
 }) {
   if (!jobs.length) {
@@ -475,6 +666,25 @@ function JobCards({
           </div>
 
           <div className="mt-4 flex items-center justify-start gap-2">
+            {onApply || job.applied ? (
+              <label className="flex h-7 items-center gap-2 border border-border bg-background px-2 text-xs font-medium text-foreground">
+                <Checkbox
+                  checked={Boolean(job.applied)}
+                  disabled={!onApply}
+                  onCheckedChange={(checked) => {
+                    if (checked === true && onApply) {
+                      onApply(job);
+                    }
+                  }}
+                  aria-label={
+                    job.applied
+                      ? `${job.title} is marked as applied`
+                      : `Mark ${job.title} as applied`
+                  }
+                />
+                Applied
+              </label>
+            ) : null}
             {job.linkedInUrl ? (
               <Button asChild size="icon-sm" variant="outline">
                 <a
