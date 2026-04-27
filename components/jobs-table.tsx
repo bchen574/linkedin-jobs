@@ -65,10 +65,10 @@ export function JobsTable() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-normal">
-              LinkedIn Jobs
+              UX Design Jobs on LinkedIn
             </h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Wide-net design searches across Canada.
+              Your LinkedIn job search organized and enriched with AI.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -293,7 +293,7 @@ export function JobsTable() {
         </div>
 
         <CollapsibleJobsSection
-          title="Applied jobs"
+          title={`Applied jobs (${appliedJobs.length})`}
           description="Jobs you have marked as applied stay out of the main list."
           isOpen={isAppliedJobsOpen}
           onOpenChange={setIsAppliedJobsOpen}
@@ -420,7 +420,7 @@ export function JobsTable() {
         </CollapsibleJobsSection>
 
         <CollapsibleJobsSection
-          title="Hidden jobs"
+          title={`Hidden jobs (${hiddenJobs.length})`}
           description="Results you have hidden stay out of the main list."
           isOpen={isHiddenJobsOpen}
           onOpenChange={setIsHiddenJobsOpen}
@@ -789,11 +789,11 @@ function getTableCaption({
   lastUpdatedAt?: Date;
 }) {
   if (isLoading && !jobs.length) {
-    return "Loading wide-net job searches.";
+    return "Loading job results.";
   }
 
   if (!lastUpdatedAt) {
-    return "Wide-net job searches refresh every 2 hours.";
+    return "Job searches refresh every 2 hours.";
   }
 
   if (visibleJobs.length !== jobs.length) {

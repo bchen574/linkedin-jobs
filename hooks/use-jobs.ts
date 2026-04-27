@@ -17,6 +17,7 @@ import { rehydrateJobs } from "@/lib/jobs/transforms";
 import type { JobResult, LoadJobsOptions, SavedJobs } from "@/lib/jobs/types";
 
 const refreshIntervalMs = 2 * 60 * 60 * 1000;
+const applyMoveDelayMs = 450;
 
 export function useJobs() {
   const [jobs, setJobs] = useState<JobResult[]>([]);
@@ -135,15 +136,25 @@ export function useJobs() {
 
   const applyJob = useCallback(
     (jobToApply: JobResult) => {
-      const nextSavedJobs = applyJobData({
-        jobToApply,
-        jobs,
-        appliedJobs,
-        onError: (error) => setErrorMessage(getErrorMessage(error)),
-      });
+      setJobs((currentJobs) =>
+        rehydrateJobs(
+          currentJobs.map((job) =>
+            job.id === jobToApply.id ? { ...job, applied: true } : job,
+          ),
+        ),
+      );
 
-      setJobs(rehydrateJobs(nextSavedJobs.jobs));
-      setAppliedJobs(rehydrateJobs(nextSavedJobs.appliedJobs));
+      window.setTimeout(() => {
+        const nextSavedJobs = applyJobData({
+          jobToApply: { ...jobToApply, applied: true },
+          jobs,
+          appliedJobs,
+          onError: (error) => setErrorMessage(getErrorMessage(error)),
+        });
+
+        setJobs(rehydrateJobs(nextSavedJobs.jobs));
+        setAppliedJobs(rehydrateJobs(nextSavedJobs.appliedJobs));
+      }, applyMoveDelayMs);
     },
     [appliedJobs, jobs],
   );
