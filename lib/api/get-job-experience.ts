@@ -1,10 +1,23 @@
-export async function getJobExperience(descriptionText: string) {
+type JobExperienceInput = {
+  title: string;
+  descriptionText?: string;
+};
+
+type JobExperienceResult = {
+  yearsOfExperience: string;
+  isUxRelated: boolean;
+};
+
+export async function getJobExperience({
+  title,
+  descriptionText,
+}: JobExperienceInput): Promise<JobExperienceResult> {
   const response = await fetch("/api/job-experience", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ descriptionText }),
+    body: JSON.stringify({ title, descriptionText }),
   });
 
   if (!response.ok) {
@@ -13,9 +26,14 @@ export async function getJobExperience(descriptionText: string) {
 
   const body = await response.json();
 
-  return typeof body.yearsOfExperience === "string"
-    ? body.yearsOfExperience
-    : "Not specified";
+  return {
+    yearsOfExperience:
+      typeof body.yearsOfExperience === "string"
+        ? body.yearsOfExperience
+        : "Not specified",
+    isUxRelated:
+      typeof body.isUxRelated === "boolean" ? body.isUxRelated : true,
+  };
 }
 
 async function getJobExperienceErrorMessage(response: Response) {

@@ -7,6 +7,7 @@ import {
   enrichJobsWithExperience,
   hideJob as hideJobData,
   loadJobsData,
+  unhideJob as unhideJobData,
 } from "@/lib/jobs/api";
 import {
   getExperienceFilters,
@@ -39,24 +40,37 @@ export function useJobs() {
   }, []);
 
   const enrichVisibleJobsWithExperience = useCallback(
-    async (jobsToEnrich: JobResult[]) => {
+    async (
+      jobsToEnrich: JobResult[],
+      hiddenJobsToKeep: JobResult[],
+      options: {
+        forceRelevanceCheck?: boolean;
+      } = {},
+    ) => {
       if (isExperienceLookupInProgress.current) {
-        return;
+        return 0;
       }
 
       isExperienceLookupInProgress.current = true;
 
       try {
-        await enrichJobsWithExperience({
+        const result = await enrichJobsWithExperience({
           jobs: jobsToEnrich,
+          hiddenJobs: hiddenJobsToKeep,
+          forceRelevanceCheck: options.forceRelevanceCheck,
           onJobsUpdated: setJobs,
+          onHiddenJobsUpdated: setHiddenJobs,
           onError: (error) => setErrorMessage(getErrorMessage(error)),
         });
+
+        return result?.hiddenCount ?? 0;
       } catch (error) {
         setErrorMessage(getErrorMessage(error));
       } finally {
         isExperienceLookupInProgress.current = false;
       }
+
+      return 0;
     },
     [],
   );
@@ -86,7 +100,10 @@ export function useJobs() {
         setSavedJobs(loadedJobs);
 
         if (loadedJobs.shouldEnrichExperience) {
-          void enrichVisibleJobsWithExperience(loadedJobs.jobs);
+          void enrichVisibleJobsWithExperience(
+            loadedJobs.jobs,
+            loadedJobs.hiddenJobs,
+          );
         }
       } catch (error) {
         setErrorMessage(getErrorMessage(error));
@@ -131,6 +148,21 @@ export function useJobs() {
     [appliedJobs, jobs],
   );
 
+  const unhideJob = useCallback(
+    (jobToUnhide: JobResult) => {
+      const nextSavedJobs = unhideJobData({
+        jobToUnhide,
+        jobs,
+        hiddenJobs,
+        onError: (error) => setErrorMessage(getErrorMessage(error)),
+      });
+
+      setJobs(rehydrateJobs(nextSavedJobs.jobs));
+      setHiddenJobs(rehydrateJobs(nextSavedJobs.hiddenJobs));
+    },
+    [hiddenJobs, jobs],
+  );
+
   useEffect(() => {
     const initialLoadId = window.setTimeout(() => {
       void loadJobs();
@@ -161,6 +193,7 @@ export function useJobs() {
     loadJobs,
     hideJob,
     applyJob,
+    unhideJob,
   };
 }
 

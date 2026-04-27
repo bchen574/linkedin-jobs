@@ -79,33 +79,65 @@ export async function loadJobsData({
 
 export async function enrichJobsWithExperience({
   jobs,
+  hiddenJobs,
+  forceRelevanceCheck = false,
   onJobsUpdated,
+  onHiddenJobsUpdated,
   onError,
 }: {
   jobs: JobResult[];
+  hiddenJobs: JobResult[];
+  forceRelevanceCheck?: boolean;
   onJobsUpdated: (jobs: JobResult[]) => void;
+  onHiddenJobsUpdated: (jobs: JobResult[]) => void;
   onError: (error: unknown) => void;
 }) {
-  const jobsMissingExperience = jobs.filter((job) => {
-    return job.descriptionText && !job.yearsOfExperience;
-  });
+  const jobsToAnalyze = forceRelevanceCheck
+    ? jobs
+    : jobs.filter((job) => {
+        return !job.yearsOfExperience;
+      });
 
-  if (!jobsMissingExperience.length) {
-    return;
+  if (!jobsToAnalyze.length) {
+    return { hiddenCount: 0 };
   }
 
   let nextJobs = jobs;
+  let nextHiddenJobs = hiddenJobs;
+  let hiddenCount = 0;
 
-  for (const job of jobsMissingExperience) {
-    if (!job.descriptionText) {
+  for (const job of jobsToAnalyze) {
+    const jobExperience = await getJobExperience({
+      title: job.title,
+      descriptionText: job.descriptionText,
+    });
+
+    if (!jobExperience.isUxRelated) {
+      const nextHiddenJob = {
+        ...job,
+        hiddenAt: Date.now(),
+        yearsOfExperience: jobExperience.yearsOfExperience,
+      };
+
+      nextJobs = nextJobs.filter((currentJob) => currentJob.id !== job.id);
+      nextHiddenJobs = mergeJobs([nextHiddenJob], nextHiddenJobs);
+
+      onJobsUpdated(rehydrateJobs(nextJobs));
+      onHiddenJobsUpdated(rehydrateJobs(nextHiddenJobs));
+      hiddenCount += 1;
+
+      void saveJobsToSupabase({
+        jobs: [],
+        appliedJobs: [],
+        hiddenJobs: [nextHiddenJob],
+      }).catch(onError);
+
       continue;
     }
 
-    const yearsOfExperience = await getJobExperience(job.descriptionText);
-
     nextJobs = nextJobs.map((currentJob) =>
       currentJob.id === job.id
-        ? { ...currentJob, yearsOfExperience }
+        ? { ...currentJob, yearsOfExperience: jobExperience.yearsOfExperience }
         : currentJob,
     );
 
@@ -123,6 +155,8 @@ export async function enrichJobsWithExperience({
       }).catch(onError);
     }
   }
+
+  return { hiddenCount };
 }
 
 export function hideJob({
@@ -152,6 +186,33 @@ export function hideJob({
   return {
     jobs: nextJobs,
     appliedJobs: nextAppliedJobs,
+    hiddenJobs: nextHiddenJobs,
+  };
+}
+
+export function unhideJob({
+  jobToUnhide,
+  jobs,
+  hiddenJobs,
+  onError,
+}: {
+  jobToUnhide: JobResult;
+  jobs: JobResult[];
+  hiddenJobs: JobResult[];
+  onError: (error: unknown) => void;
+}) {
+  const nextHiddenJobs = hiddenJobs.filter((job) => job.id !== jobToUnhide.id);
+  const nextJob = { ...jobToUnhide, hiddenAt: undefined, applied: false };
+  const nextJobs = mergeJobs([nextJob], jobs);
+
+  void saveJobsToSupabase({
+    jobs: [nextJob],
+    appliedJobs: [],
+    hiddenJobs: [],
+  }).catch(onError);
+
+  return {
+    jobs: nextJobs,
     hiddenJobs: nextHiddenJobs,
   };
 }

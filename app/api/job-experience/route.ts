@@ -1,4 +1,5 @@
 type JobExperienceRequest = {
+  title?: unknown;
   descriptionText?: unknown;
 };
 
@@ -14,21 +15,25 @@ export async function POST(request: Request) {
 
   try {
     const input = (await request.json()) as JobExperienceRequest;
+    const title = typeof input.title === "string" ? input.title.trim() : "";
     const descriptionText =
       typeof input.descriptionText === "string"
         ? input.descriptionText.trim()
         : "";
 
-    if (!descriptionText) {
+    if (!title && !descriptionText) {
       return Response.json(
-        { error: "Job description text is required" },
+        { error: "Job title or description text is required" },
         { status: 400 },
       );
     }
 
-    const yearsOfExperience = await getYearsOfExperience(descriptionText);
+    const jobAnalysis = await getJobAnalysis({
+      title,
+      descriptionText,
+    });
 
-    return Response.json({ yearsOfExperience }, { status: 200 });
+    return Response.json(jobAnalysis, { status: 200 });
   } catch (error: unknown) {
     if (error instanceof Error) {
       console.error("ERROR:", error.message);
@@ -40,7 +45,13 @@ export async function POST(request: Request) {
   }
 }
 
-async function getYearsOfExperience(descriptionText: string) {
+async function getJobAnalysis({
+  title,
+  descriptionText,
+}: {
+  title: string;
+  descriptionText: string;
+}) {
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -53,11 +64,11 @@ async function getYearsOfExperience(descriptionText: string) {
         {
           role: "system",
           content:
-            "Extract the years of professional experience required by the job description. Use the closest range. If no requirement is stated, use Not specified.",
+            "Analyze the job title and description. Extract the years of professional experience required by the job description. Also decide whether the role is related to UX design, product design, UX/UI design, user research, interaction design, service design, or product experience design. Mark false for roles that are primarily software engineering, graphic design, marketing, sales, project management, business analysis, industrial design, architecture, or unrelated design work. Use the closest experience range. If no requirement is stated, use Not specified.",
         },
         {
           role: "user",
-          content: `Job description:\n${descriptionText}`,
+          content: `Job title:\n${title || "Unknown"}\n\nJob description:\n${descriptionText || "Not provided"}`,
         },
       ],
       text: {
@@ -82,8 +93,11 @@ async function getYearsOfExperience(descriptionText: string) {
                   "10+ years",
                 ],
               },
+              isUxRelated: {
+                type: "boolean",
+              },
             },
-            required: ["yearsOfExperience"],
+            required: ["yearsOfExperience", "isUxRelated"],
           },
         },
       },
@@ -98,9 +112,16 @@ async function getYearsOfExperience(descriptionText: string) {
   const outputText = getOutputText(body);
   const parsedOutput = JSON.parse(outputText);
 
-  return typeof parsedOutput.yearsOfExperience === "string"
-    ? parsedOutput.yearsOfExperience
-    : "Not specified";
+  return {
+    yearsOfExperience:
+      typeof parsedOutput.yearsOfExperience === "string"
+        ? parsedOutput.yearsOfExperience
+        : "Not specified",
+    isUxRelated:
+      typeof parsedOutput.isUxRelated === "boolean"
+        ? parsedOutput.isUxRelated
+        : true,
+  };
 }
 
 async function getOpenAiErrorMessage(response: Response) {

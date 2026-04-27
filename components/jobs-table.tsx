@@ -54,6 +54,7 @@ export function JobsTable() {
     loadJobs,
     hideJob,
     applyJob,
+    unhideJob,
   } = useJobs();
   const [isAppliedJobsOpen, setIsAppliedJobsOpen] = useState(false);
   const [isHiddenJobsOpen, setIsHiddenJobsOpen] = useState(false);
@@ -429,6 +430,7 @@ export function JobsTable() {
               jobs={hiddenJobs}
               isLoading={false}
               emptyMessage="Hidden jobs will appear here."
+              onUnhide={unhideJob}
             />
             <p className="mt-3 text-center text-xs text-muted-foreground">
               {hiddenJobs.length
@@ -439,13 +441,14 @@ export function JobsTable() {
           <div className="hidden bg-background md:block">
             <Table className="table-fixed">
               <colgroup>
-                <col className="w-[calc((100%_-_10.5rem)_/_5)]" />
-                <col className="w-[calc((100%_-_10.5rem)_/_5)]" />
-                <col className="w-[calc((100%_-_10.5rem)_/_5)]" />
-                <col className="w-[calc((100%_-_10.5rem)_/_5)]" />
-                <col className="w-[calc((100%_-_10.5rem)_/_5)]" />
+                <col className="w-[calc((100%_-_17.5rem)_/_5)]" />
+                <col className="w-[calc((100%_-_17.5rem)_/_5)]" />
+                <col className="w-[calc((100%_-_17.5rem)_/_5)]" />
+                <col className="w-[calc((100%_-_17.5rem)_/_5)]" />
+                <col className="w-[calc((100%_-_17.5rem)_/_5)]" />
                 <col className="w-10" />
                 <col className="w-32" />
+                <col className="w-28" />
               </colgroup>
               <TableCaption>
                 {hiddenJobs.length
@@ -461,6 +464,7 @@ export function JobsTable() {
                   <TableHead>Experience</TableHead>
                   <TableHead className="w-10 text-center">Post</TableHead>
                   <TableHead className="w-32 text-right">Apply</TableHead>
+                  <TableHead className="w-28 text-right">Restore</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -518,12 +522,22 @@ export function JobsTable() {
                         </span>
                       )}
                     </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => unhideJob(job)}
+                      >
+                        Unhide
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
                 {!hiddenJobs.length ? (
                   <TableRow>
                     <TableCell
-                      colSpan={7}
+                      colSpan={8}
                       className="h-20 text-center text-muted-foreground"
                     >
                       Hidden jobs will appear here.
@@ -628,12 +642,14 @@ function JobCards({
   emptyMessage,
   onApply,
   onHide,
+  onUnhide,
 }: {
   jobs: JobResult[];
   isLoading: boolean;
   emptyMessage: string;
   onApply?: (job: JobResult) => void;
   onHide?: (job: JobResult) => void;
+  onUnhide?: (job: JobResult) => void;
 }) {
   if (!jobs.length) {
     return (
@@ -715,6 +731,16 @@ function JobCards({
                 onClick={() => onHide(job)}
               >
                 Hide
+              </Button>
+            ) : null}
+            {onUnhide ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => onUnhide(job)}
+              >
+                Unhide
               </Button>
             ) : null}
           </div>
