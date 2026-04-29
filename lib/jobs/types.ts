@@ -1,5 +1,6 @@
 import type { PostedWithin } from "@/lib/linkedin/types";
 
+// A normalized job listing used by the app after fetching from LinkedIn.
 export type JobResult = {
   id: string;
   title: string;
@@ -15,6 +16,7 @@ export type JobResult = {
   applied?: boolean;
 };
 
+// The persisted job cache split into visible, applied, and hidden jobs.
 export type SavedJobs = {
   fetchedAt: number;
   jobs: JobResult[];
@@ -22,12 +24,14 @@ export type SavedJobs = {
   hiddenJobs: JobResult[];
 };
 
+// Options that control how jobs are loaded, refreshed, and displayed.
 export type LoadJobsOptions = {
   force?: boolean;
   postedWithin?: PostedWithin;
   replaceVisible?: boolean;
 };
 
+// Loaded job data plus metadata about whether experience enrichment is needed.
 export type LoadedJobs = SavedJobs & {
   shouldEnrichExperience: boolean;
 };

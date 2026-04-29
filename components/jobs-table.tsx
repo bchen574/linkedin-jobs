@@ -83,7 +83,7 @@ export function JobsTable() {
             </Button>
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button type="button" variant="outline" disabled={isLoading}>
+                <Button type="button" variant="outline" disabled>
                   <ArrowClockwise aria-hidden="true" weight="bold" />
                   Refresh all
                 </Button>
