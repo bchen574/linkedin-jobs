@@ -34,7 +34,7 @@ export async function loadJobsData({
   if (savedJobs && shouldUseCache(savedJobs, options)) {
     return {
       ...savedJobs,
-      shouldEnrichExperience: false,
+      shouldEnrichExperience: hasJobsToEnrich(savedJobs.jobs),
     };
   }
 
@@ -78,6 +78,10 @@ function shouldUseCache(
   }
 
   return !isSavedJobsStale(savedJobs);
+}
+
+function hasJobsToEnrich(jobs: JobResult[]) {
+  return jobs.some((job) => !job.yearsOfExperience && job.descriptionText);
 }
 
 function filterUnavailableJobs(
