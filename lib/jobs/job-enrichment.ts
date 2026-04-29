@@ -1,4 +1,4 @@
-import { getJobExperience } from "@/lib/api/get-job-experience";
+import { analyzeJob } from "@/lib/api/job-analysis";
 import { saveJobsToSupabase } from "@/lib/api/save-jobs-to-supabase";
 import { mergeJobs, rehydrateJobs } from "@/lib/jobs/transforms";
 import type { JobResult } from "@/lib/jobs/types";
@@ -29,7 +29,7 @@ export async function enrichJobsWithExperience({
   let hiddenCount = 0;
 
   for (const job of jobsToAnalyze) {
-    const jobExperience = await getJobExperience({
+    const jobExperience = await analyzeJob({
       title: job.title,
       descriptionText: job.descriptionText,
     });
