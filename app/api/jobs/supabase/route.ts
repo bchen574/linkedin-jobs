@@ -8,6 +8,8 @@ type SaveJobsRequest = {
 type JobRowInput = Record<string, unknown>;
 
 const defaultTableName = "linkedin_jobs";
+const maxDescriptionTextLength = 20_000;
+const maxUpsertBodyBytes = 500_000;
 
 export async function GET() {
   const supabaseUrl =
@@ -74,14 +76,14 @@ export async function POST(request: Request) {
       return Response.json({ saved: 0 }, { status: 200 });
     }
 
-    await upsertRows({
+    const savedCount = await upsertRows({
       rows,
       supabaseUrl,
       supabaseSecretKey,
       tableName,
     });
 
-    return Response.json({ saved: rows.length }, { status: 200 });
+    return Response.json({ saved: savedCount }, { status: 200 });
   } catch (error: unknown) {
     if (error instanceof Error) {
       console.error("ERROR:", error.message);
@@ -138,20 +140,28 @@ async function upsertRows({
 
   url.searchParams.set("on_conflict", "id");
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      apikey: supabaseSecretKey,
-      Authorization: `Bearer ${supabaseSecretKey}`,
-      "Content-Type": "application/json",
-      Prefer: "resolution=merge-duplicates",
-    },
-    body: JSON.stringify(rows),
-  });
+  let savedCount = 0;
 
-  if (!response.ok) {
-    throw new Error(await getSupabaseErrorMessage(response));
+  for (const rowBatch of getRowBatches(rows)) {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        apikey: supabaseSecretKey,
+        Authorization: `Bearer ${supabaseSecretKey}`,
+        "Content-Type": "application/json",
+        Prefer: "resolution=merge-duplicates",
+      },
+      body: JSON.stringify(rowBatch),
+    });
+
+    if (!response.ok) {
+      throw new Error(await getSupabaseErrorMessage(response));
+    }
+
+    savedCount += rowBatch.length;
   }
+
+  return savedCount;
 }
 
 async function getRowsFromSupabase({
@@ -240,9 +250,72 @@ function getRow(
     hidden: status.hidden,
     applied: status.applied,
     hidden_at: getDateValue(hiddenAtTimestamp),
-    data: job,
+    data: getPersistedJobData(job),
     updated_at: new Date().toISOString(),
   };
+}
+
+function getRowBatches(rows: JobRow[]) {
+  const batches: JobRow[][] = [];
+  let currentBatch: JobRow[] = [];
+  let currentBatchBytes = getJsonByteLength([]);
+
+  for (const row of rows) {
+    const rowBytes = getJsonByteLength(row);
+    const separatorBytes = currentBatch.length ? 1 : 0;
+    const nextBatchBytes = currentBatchBytes + rowBytes + separatorBytes;
+
+    if (currentBatch.length && nextBatchBytes > maxUpsertBodyBytes) {
+      batches.push(currentBatch);
+      currentBatch = [];
+      currentBatchBytes = getJsonByteLength([]);
+    }
+
+    currentBatch.push(row);
+    currentBatchBytes += rowBytes + (currentBatch.length > 1 ? 1 : 0);
+  }
+
+  if (currentBatch.length) {
+    batches.push(currentBatch);
+  }
+
+  return batches;
+}
+
+function getJsonByteLength(value: unknown) {
+  return new TextEncoder().encode(JSON.stringify(value)).length;
+}
+
+function getPersistedJobData(job: JobRowInput): JobRowInput {
+  return omitUndefinedValues({
+    id: getStringValue(job.id),
+    title: getStringValue(job.title),
+    postedAt: getStringValue(job.postedAt),
+    postedAtTimestamp: getNumberValue(job.postedAtTimestamp),
+    company: getStringValue(job.company),
+    location: getStringValue(job.location),
+    descriptionText: getTruncatedStringValue(
+      job.descriptionText,
+      maxDescriptionTextLength,
+    ),
+    yearsOfExperience: getStringValue(job.yearsOfExperience),
+    linkedInUrl: getStringValue(job.linkedInUrl),
+    applyUrl: getStringValue(job.applyUrl),
+    hiddenAt: getNumberValue(job.hiddenAt),
+    applied: getBooleanValue(job.applied),
+  });
+}
+
+function getTruncatedStringValue(value: unknown, maxLength: number) {
+  const stringValue = getStringValue(value);
+
+  return stringValue ? stringValue.slice(0, maxLength) : undefined;
+}
+
+function omitUndefinedValues(record: JobRowInput): JobRowInput {
+  return Object.fromEntries(
+    Object.entries(record).filter(([, value]) => value !== undefined),
+  );
 }
 
 function getJobsResponse(rows: Record<string, unknown>[]) {
