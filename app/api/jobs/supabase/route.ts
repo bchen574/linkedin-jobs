@@ -8,6 +8,7 @@ type SaveJobsRequest = {
 type JobRowInput = Record<string, unknown>;
 
 const defaultTableName = "linkedin_jobs";
+const maxSupabaseRequestBytes = 700_000;
 
 export async function GET() {
   const supabaseUrl =
@@ -134,6 +135,29 @@ async function upsertRows({
   supabaseSecretKey: string;
   tableName: string;
 }) {
+  const rowChunks = getRowChunks(rows);
+
+  for (const rowChunk of rowChunks) {
+    await upsertRowChunk({
+      rows: rowChunk,
+      supabaseUrl,
+      supabaseSecretKey,
+      tableName,
+    });
+  }
+}
+
+async function upsertRowChunk({
+  rows,
+  supabaseUrl,
+  supabaseSecretKey,
+  tableName,
+}: {
+  rows: JobRow[];
+  supabaseUrl: string;
+  supabaseSecretKey: string;
+  tableName: string;
+}) {
   const url = new URL(`/rest/v1/${tableName}`, supabaseUrl);
 
   url.searchParams.set("on_conflict", "id");
@@ -152,6 +176,29 @@ async function upsertRows({
   if (!response.ok) {
     throw new Error(await getSupabaseErrorMessage(response));
   }
+}
+
+function getRowChunks(rows: JobRow[]) {
+  const chunks: JobRow[][] = [];
+  let chunk: JobRow[] = [];
+
+  for (const row of rows) {
+    const nextChunk = [...chunk, row];
+
+    if (chunk.length && getJsonSize(nextChunk) > maxSupabaseRequestBytes) {
+      chunks.push(chunk);
+      chunk = [row];
+      continue;
+    }
+
+    chunk = nextChunk;
+  }
+
+  if (chunk.length) {
+    chunks.push(chunk);
+  }
+
+  return chunks;
 }
 
 async function getRowsFromSupabase({
@@ -338,6 +385,10 @@ function getNumberValue(value: unknown) {
 
 function getBooleanValue(value: unknown) {
   return typeof value === "boolean" ? value : undefined;
+}
+
+function getJsonSize(value: unknown) {
+  return new TextEncoder().encode(JSON.stringify(value)).length;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
