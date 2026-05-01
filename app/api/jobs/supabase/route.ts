@@ -1,3 +1,10 @@
+/**
+ * Simplified job save logic:
+ * - Minimal transformation
+ * - Batch by count (50 rows)
+ * - Truncate large fields
+ */
+
 type SaveJobsRequest = {
   jobs?: unknown;
   appliedJobs?: unknown;
@@ -8,9 +15,9 @@ type SaveJobsRequest = {
 type JobRowInput = Record<string, unknown>;
 
 const defaultTableName = "linkedin_jobs";
+// Prevents a single job description from making the payload too large.
 const maxDescriptionTextLength = 20_000;
-const maxUpsertBodyBytes = 500_000;
-const maxSupabaseRequestBytes = 700_000;
+const maxRowsPerBatch = 50;
 
 export async function GET() {
   const supabaseUrl =
@@ -137,16 +144,21 @@ async function upsertRows({
   supabaseSecretKey: string;
   tableName: string;
 }) {
-  const rowChunks = getRowChunks(rows);
+  let totalSaved = 0;
+  const batches = chunkByCount(rows, maxRowsPerBatch);
 
-  for (const rowChunk of rowChunks) {
-    await upsertRowChunk({
-      rows: rowChunk,
+  for (const batch of batches) {
+    const savedCount = await upsertRowChunk({
+      rows: batch,
       supabaseUrl,
       supabaseSecretKey,
       tableName,
     });
+
+    totalSaved += savedCount;
   }
+
+  return totalSaved;
 }
 
 async function upsertRowChunk({
@@ -164,51 +176,22 @@ async function upsertRowChunk({
 
   url.searchParams.set("on_conflict", "id");
 
-  let savedCount = 0;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      apikey: supabaseSecretKey,
+      Authorization: `Bearer ${supabaseSecretKey}`,
+      "Content-Type": "application/json",
+      Prefer: "resolution=merge-duplicates",
+    },
+    body: JSON.stringify(rows),
+  });
 
-  for (const rowBatch of getRowBatches(rows)) {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        apikey: supabaseSecretKey,
-        Authorization: `Bearer ${supabaseSecretKey}`,
-        "Content-Type": "application/json",
-        Prefer: "resolution=merge-duplicates",
-      },
-      body: JSON.stringify(rowBatch),
-    });
-
-    if (!response.ok) {
-      throw new Error(await getSupabaseErrorMessage(response));
-    }
-
-    savedCount += rowBatch.length;
+  if (!response.ok) {
+    throw new Error(await getSupabaseErrorMessage(response));
   }
 
-  return savedCount;
-}
-
-function getRowChunks(rows: JobRow[]) {
-  const chunks: JobRow[][] = [];
-  let chunk: JobRow[] = [];
-
-  for (const row of rows) {
-    const nextChunk = [...chunk, row];
-
-    if (chunk.length && getJsonSize(nextChunk) > maxSupabaseRequestBytes) {
-      chunks.push(chunk);
-      chunk = [row];
-      continue;
-    }
-
-    chunk = nextChunk;
-  }
-
-  if (chunk.length) {
-    chunks.push(chunk);
-  }
-
-  return chunks;
+  return rows.length;
 }
 
 async function getRowsFromSupabase({
@@ -281,88 +264,53 @@ function getRow(
     applied: boolean;
   },
 ): JobRow {
-  const postedAtTimestamp = getNumberValue(job.postedAtTimestamp);
-  const hiddenAtTimestamp = getNumberValue(job.hiddenAt);
+  const postedAtTimestamp =
+    typeof job.postedAtTimestamp === "number" ? job.postedAtTimestamp : null;
+  const hiddenAtTimestamp =
+    typeof job.hiddenAt === "number" ? job.hiddenAt : null;
 
   return {
-    id: getStringValue(job.id) ?? crypto.randomUUID(),
-    title: getStringValue(job.title) ?? "Untitled role",
-    company: getStringValue(job.company) ?? "Unknown company",
-    location: getStringValue(job.location) ?? "Unknown",
+    id: typeof job.id === "string" && job.id ? job.id : crypto.randomUUID(),
+    title:
+      typeof job.title === "string" && job.title ? job.title : "Untitled role",
+    company:
+      typeof job.company === "string" && job.company
+        ? job.company
+        : "Unknown company",
+    location:
+      typeof job.location === "string" && job.location
+        ? job.location
+        : "Unknown",
     posted_at: getDateValue(postedAtTimestamp),
-    posted_at_timestamp: postedAtTimestamp ?? null,
-    years_of_experience: getStringValue(job.yearsOfExperience) ?? null,
-    linkedin_url: getStringValue(job.linkedInUrl) ?? null,
-    apply_url: getStringValue(job.applyUrl) ?? null,
+    posted_at_timestamp: postedAtTimestamp,
+    years_of_experience:
+      typeof job.yearsOfExperience === "string"
+        ? job.yearsOfExperience
+        : null,
+    linkedin_url: typeof job.linkedInUrl === "string" ? job.linkedInUrl : null,
+    apply_url: typeof job.applyUrl === "string" ? job.applyUrl : null,
     hidden: status.hidden,
     applied: status.applied,
     hidden_at: getDateValue(hiddenAtTimestamp),
-    data: getPersistedJobData(job),
+    data: {
+      ...job,
+      descriptionText:
+        typeof job.descriptionText === "string"
+          ? job.descriptionText.slice(0, maxDescriptionTextLength)
+          : undefined,
+    },
     updated_at: new Date().toISOString(),
   };
 }
 
-function getRowBatches(rows: JobRow[]) {
-  const batches: JobRow[][] = [];
-  let currentBatch: JobRow[] = [];
-  let currentBatchBytes = getJsonByteLength([]);
+function chunkByCount<T>(items: T[], size: number) {
+  const chunks: T[][] = [];
 
-  for (const row of rows) {
-    const rowBytes = getJsonByteLength(row);
-    const separatorBytes = currentBatch.length ? 1 : 0;
-    const nextBatchBytes = currentBatchBytes + rowBytes + separatorBytes;
-
-    if (currentBatch.length && nextBatchBytes > maxUpsertBodyBytes) {
-      batches.push(currentBatch);
-      currentBatch = [];
-      currentBatchBytes = getJsonByteLength([]);
-    }
-
-    currentBatch.push(row);
-    currentBatchBytes += rowBytes + (currentBatch.length > 1 ? 1 : 0);
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
   }
 
-  if (currentBatch.length) {
-    batches.push(currentBatch);
-  }
-
-  return batches;
-}
-
-function getJsonByteLength(value: unknown) {
-  return new TextEncoder().encode(JSON.stringify(value)).length;
-}
-
-function getPersistedJobData(job: JobRowInput): JobRowInput {
-  return omitUndefinedValues({
-    id: getStringValue(job.id),
-    title: getStringValue(job.title),
-    postedAt: getStringValue(job.postedAt),
-    postedAtTimestamp: getNumberValue(job.postedAtTimestamp),
-    company: getStringValue(job.company),
-    location: getStringValue(job.location),
-    descriptionText: getTruncatedStringValue(
-      job.descriptionText,
-      maxDescriptionTextLength,
-    ),
-    yearsOfExperience: getStringValue(job.yearsOfExperience),
-    linkedInUrl: getStringValue(job.linkedInUrl),
-    applyUrl: getStringValue(job.applyUrl),
-    hiddenAt: getNumberValue(job.hiddenAt),
-    applied: getBooleanValue(job.applied),
-  });
-}
-
-function getTruncatedStringValue(value: unknown, maxLength: number) {
-  const stringValue = getStringValue(value);
-
-  return stringValue ? stringValue.slice(0, maxLength) : undefined;
-}
-
-function omitUndefinedValues(record: JobRowInput): JobRowInput {
-  return Object.fromEntries(
-    Object.entries(record).filter(([, value]) => value !== undefined),
-  );
+  return chunks;
 }
 
 function getJobsResponse(rows: Record<string, unknown>[]) {
@@ -390,25 +338,37 @@ function getJobFromRow(row: Record<string, unknown>) {
 
   return {
     ...data,
-    id:
-      getStringValue(row.id) ?? getStringValue(data.id) ?? crypto.randomUUID(),
-    title: getStringValue(row.title) ?? getStringValue(data.title) ?? "",
-    company: getStringValue(row.company) ?? getStringValue(data.company) ?? "",
+    id: typeof row.id === "string" ? row.id : crypto.randomUUID(),
+    title: typeof row.title === "string" ? row.title : "",
+    company: typeof row.company === "string" ? row.company : "",
     location:
-      getStringValue(row.location) ??
-      getStringValue(data.location) ??
-      "Unknown",
+      typeof row.location === "string"
+        ? row.location
+        : typeof data.location === "string"
+          ? data.location
+          : "Unknown",
     postedAtTimestamp:
-      getNumberValue(row.posted_at_timestamp) ??
-      getNumberValue(data.postedAtTimestamp),
+      typeof row.posted_at_timestamp === "number"
+        ? row.posted_at_timestamp
+        : data.postedAtTimestamp,
     yearsOfExperience:
-      getStringValue(row.years_of_experience) ??
-      getStringValue(data.yearsOfExperience),
+      typeof row.years_of_experience === "string"
+        ? row.years_of_experience
+        : data.yearsOfExperience,
     linkedInUrl:
-      getStringValue(row.linkedin_url) ?? getStringValue(data.linkedInUrl),
-    applyUrl: getStringValue(row.apply_url) ?? getStringValue(data.applyUrl),
-    hiddenAt: getTimestampValue(row.hidden_at) ?? getNumberValue(data.hiddenAt),
-    applied: getBooleanValue(row.applied) ?? getBooleanValue(data.applied),
+      typeof row.linkedin_url === "string"
+        ? row.linkedin_url
+        : data.linkedInUrl,
+    applyUrl: typeof row.apply_url === "string" ? row.apply_url : data.applyUrl,
+    hiddenAt:
+      getTimestampValue(row.hidden_at) ??
+      (typeof data.hiddenAt === "number" ? data.hiddenAt : undefined),
+    applied:
+      typeof row.applied === "boolean"
+        ? row.applied
+        : typeof data.applied === "boolean"
+          ? data.applied
+          : undefined,
   };
 }
 
@@ -436,7 +396,7 @@ async function getSupabaseErrorMessage(response: Response) {
   }
 }
 
-function getDateValue(timestamp: number | undefined) {
+function getDateValue(timestamp: number | null) {
   return timestamp ? new Date(timestamp).toISOString() : null;
 }
 
@@ -448,24 +408,6 @@ function getTimestampValue(value: unknown) {
   const timestamp = new Date(value).getTime();
 
   return Number.isNaN(timestamp) ? undefined : timestamp;
-}
-
-function getStringValue(value: unknown) {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
-
-function getNumberValue(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value)
-    ? value
-    : undefined;
-}
-
-function getBooleanValue(value: unknown) {
-  return typeof value === "boolean" ? value : undefined;
-}
-
-function getJsonSize(value: unknown) {
-  return new TextEncoder().encode(JSON.stringify(value)).length;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
