@@ -10,6 +10,7 @@ type JobRowInput = Record<string, unknown>;
 const defaultTableName = "linkedin_jobs";
 const maxDescriptionTextLength = 20_000;
 const maxUpsertBodyBytes = 500_000;
+const maxSupabaseRequestBytes = 700_000;
 
 export async function GET() {
   const supabaseUrl =
@@ -136,6 +137,29 @@ async function upsertRows({
   supabaseSecretKey: string;
   tableName: string;
 }) {
+  const rowChunks = getRowChunks(rows);
+
+  for (const rowChunk of rowChunks) {
+    await upsertRowChunk({
+      rows: rowChunk,
+      supabaseUrl,
+      supabaseSecretKey,
+      tableName,
+    });
+  }
+}
+
+async function upsertRowChunk({
+  rows,
+  supabaseUrl,
+  supabaseSecretKey,
+  tableName,
+}: {
+  rows: JobRow[];
+  supabaseUrl: string;
+  supabaseSecretKey: string;
+  tableName: string;
+}) {
   const url = new URL(`/rest/v1/${tableName}`, supabaseUrl);
 
   url.searchParams.set("on_conflict", "id");
@@ -162,6 +186,29 @@ async function upsertRows({
   }
 
   return savedCount;
+}
+
+function getRowChunks(rows: JobRow[]) {
+  const chunks: JobRow[][] = [];
+  let chunk: JobRow[] = [];
+
+  for (const row of rows) {
+    const nextChunk = [...chunk, row];
+
+    if (chunk.length && getJsonSize(nextChunk) > maxSupabaseRequestBytes) {
+      chunks.push(chunk);
+      chunk = [row];
+      continue;
+    }
+
+    chunk = nextChunk;
+  }
+
+  if (chunk.length) {
+    chunks.push(chunk);
+  }
+
+  return chunks;
 }
 
 async function getRowsFromSupabase({
@@ -343,11 +390,14 @@ function getJobFromRow(row: Record<string, unknown>) {
 
   return {
     ...data,
-    id: getStringValue(row.id) ?? getStringValue(data.id) ?? crypto.randomUUID(),
+    id:
+      getStringValue(row.id) ?? getStringValue(data.id) ?? crypto.randomUUID(),
     title: getStringValue(row.title) ?? getStringValue(data.title) ?? "",
     company: getStringValue(row.company) ?? getStringValue(data.company) ?? "",
     location:
-      getStringValue(row.location) ?? getStringValue(data.location) ?? "Unknown",
+      getStringValue(row.location) ??
+      getStringValue(data.location) ??
+      "Unknown",
     postedAtTimestamp:
       getNumberValue(row.posted_at_timestamp) ??
       getNumberValue(data.postedAtTimestamp),
@@ -357,8 +407,7 @@ function getJobFromRow(row: Record<string, unknown>) {
     linkedInUrl:
       getStringValue(row.linkedin_url) ?? getStringValue(data.linkedInUrl),
     applyUrl: getStringValue(row.apply_url) ?? getStringValue(data.applyUrl),
-    hiddenAt:
-      getTimestampValue(row.hidden_at) ?? getNumberValue(data.hiddenAt),
+    hiddenAt: getTimestampValue(row.hidden_at) ?? getNumberValue(data.hiddenAt),
     applied: getBooleanValue(row.applied) ?? getBooleanValue(data.applied),
   };
 }
@@ -406,11 +455,17 @@ function getStringValue(value: unknown) {
 }
 
 function getNumberValue(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 function getBooleanValue(value: unknown) {
   return typeof value === "boolean" ? value : undefined;
+}
+
+function getJsonSize(value: unknown) {
+  return new TextEncoder().encode(JSON.stringify(value)).length;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
