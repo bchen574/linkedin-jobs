@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowClockwise } from "@phosphor-icons/react";
+import { ArrowClockwise, Sparkle, SpinnerGap } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 
 import { JobSearchProgress } from "@/components/jobs-table-shared";
@@ -29,8 +29,10 @@ export function JobsPageLayout({
   setSelectedExperience,
   isLoading,
   isFetchingJobs,
+  isCleaningUpJobs,
   errorMessage,
   loadJobs,
+  cleanupJobs,
   children,
 }: {
   experienceFilters: ExperienceFilter[];
@@ -38,8 +40,18 @@ export function JobsPageLayout({
   setSelectedExperience: (experience: string) => void;
   isLoading: boolean;
   isFetchingJobs: boolean;
+  isCleaningUpJobs: boolean;
   errorMessage?: string;
   loadJobs: (options?: LoadJobsOptions) => void | Promise<void>;
+  cleanupJobs: () =>
+    | {
+        hiddenCount: number;
+        experienceUpdatedCount: number;
+      }
+    | Promise<{
+        hiddenCount: number;
+        experienceUpdatedCount: number;
+      }>;
   children: ReactNode;
 }) {
   return (
@@ -62,6 +74,23 @@ export function JobsPageLayout({
             >
               <ArrowClockwise aria-hidden="true" weight="bold" />
               Refresh
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void cleanupJobs()}
+              disabled={isLoading || isCleaningUpJobs}
+            >
+              {isCleaningUpJobs ? (
+                <SpinnerGap
+                  aria-hidden="true"
+                  className="animate-spin"
+                  weight="bold"
+                />
+              ) : (
+                <Sparkle aria-hidden="true" weight="bold" />
+              )}
+              {isCleaningUpJobs ? "Cleaning..." : "AI cleanup"}
             </Button>
             <AlertDialog>
               <AlertDialogTrigger asChild>

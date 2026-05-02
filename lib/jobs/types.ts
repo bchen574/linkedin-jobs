@@ -14,6 +14,7 @@ export type JobResult = {
   applyUrl?: string;
   hiddenAt?: number;
   applied?: boolean;
+  hidden?: boolean;
 };
 
 // The persisted job cache split into visible, applied, and hidden jobs.

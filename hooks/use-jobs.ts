@@ -1,193 +1,162 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
-import {
-  applyJob as applyJobData,
-  enrichJobsWithExperience,
-  hideJob as hideJobData,
-  loadJobsData,
-  unhideJob as unhideJobData,
-} from "@/lib/jobs/api";
-import {
-  getExperienceFilters,
-  getVisibleJobs,
-} from "@/lib/jobs/filters";
+import { analyzeJob } from "@/lib/api/job-analysis";
+import { saveJobsToSupabase } from "@/lib/api/save-jobs-to-supabase";
+import { loadJobsData } from "@/lib/jobs/api";
+import { getExperienceFilters, getVisibleJobs } from "@/lib/jobs/filters";
 import { rehydrateJobs } from "@/lib/jobs/transforms";
 import type { JobResult, LoadJobsOptions, SavedJobs } from "@/lib/jobs/types";
 
-const refreshIntervalMs = 2 * 60 * 60 * 1000;
-const applyMoveDelayMs = 450;
-
 export function useJobs() {
   const [jobs, setJobs] = useState<JobResult[]>([]);
-  const [appliedJobs, setAppliedJobs] = useState<JobResult[]>([]);
-  const [hiddenJobs, setHiddenJobs] = useState<JobResult[]>([]);
-  const [errorMessage, setErrorMessage] = useState<string>();
   const [isLoading, setIsLoading] = useState(true);
   const [isFetchingJobs, setIsFetchingJobs] = useState(false);
+  const [isCleaningUpJobs, setIsCleaningUpJobs] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string>();
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date>();
   const [selectedExperience, setSelectedExperience] = useState("All");
-  const isSearchInProgress = useRef(false);
-  const isExperienceLookupInProgress = useRef(false);
-  const experienceFilters = getExperienceFilters(jobs);
-  const visibleJobs = getVisibleJobs(jobs, selectedExperience);
 
-  const setSavedJobs = useCallback((savedJobs: SavedJobs) => {
-    setJobs(rehydrateJobs(savedJobs.jobs));
-    setAppliedJobs(rehydrateJobs(savedJobs.appliedJobs));
-    setHiddenJobs(rehydrateJobs(savedJobs.hiddenJobs));
+  const activeJobs = jobs.filter((job) => !job.hidden && !job.applied);
+  const appliedJobs = jobs.filter((job) => job.applied);
+  const hiddenJobs = jobs.filter((job) => job.hidden);
+  const visibleJobs = getVisibleJobs(activeJobs, selectedExperience);
+  const experienceFilters = getExperienceFilters(activeJobs);
+
+  function setSavedJobs(savedJobs: SavedJobs) {
+    setJobs(getJobsFromSavedJobs(savedJobs));
     setLastUpdatedAt(new Date(savedJobs.fetchedAt));
-  }, []);
+  }
 
-  const enrichVisibleJobsWithExperience = useCallback(
-    async (
-      jobsToEnrich: JobResult[],
-      hiddenJobsToKeep: JobResult[],
-      options: {
-        forceRelevanceCheck?: boolean;
-      } = {},
-    ) => {
-      if (isExperienceLookupInProgress.current) {
-        return 0;
-      }
+  async function loadJobs(options: LoadJobsOptions = {}) {
+    setIsLoading(true);
+    setIsFetchingJobs(false);
+    setErrorMessage(undefined);
 
-      isExperienceLookupInProgress.current = true;
+    try {
+      const loadedJobs = await loadJobsData({
+        options,
+        onSavedJobs: setSavedJobs,
+        onFetchStart: () => setIsFetchingJobs(true),
+        onError: (error) => setErrorMessage(getErrorMessage(error)),
+      });
 
-      try {
-        const result = await enrichJobsWithExperience({
-          jobs: jobsToEnrich,
-          hiddenJobs: hiddenJobsToKeep,
-          forceRelevanceCheck: options.forceRelevanceCheck,
-          onJobsUpdated: setJobs,
-          onHiddenJobsUpdated: setHiddenJobs,
-          onError: (error) => setErrorMessage(getErrorMessage(error)),
-        });
-
-        return result?.hiddenCount ?? 0;
-      } catch (error) {
-        setErrorMessage(getErrorMessage(error));
-      } finally {
-        isExperienceLookupInProgress.current = false;
-      }
-
-      return 0;
-    },
-    [],
-  );
-
-  const loadJobs = useCallback(
-    async (options: LoadJobsOptions = {}) => {
-      if (isSearchInProgress.current) {
+      if (!loadedJobs) {
         return;
       }
 
-      isSearchInProgress.current = true;
-      setIsLoading(true);
-      setErrorMessage(undefined);
+      setSavedJobs(loadedJobs);
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    } finally {
+      setIsFetchingJobs(false);
+      setIsLoading(false);
+    }
+  }
 
-      try {
-        const loadedJobs = await loadJobsData({
-          options,
-          onSavedJobs: setSavedJobs,
-          onFetchStart: () => setIsFetchingJobs(true),
-          onError: (error) => setErrorMessage(getErrorMessage(error)),
-        });
+  async function applyJob(jobToApply: JobResult) {
+    const appliedJob = { ...jobToApply, applied: true, hidden: false };
 
-        if (!loadedJobs) {
-          return;
-        }
+    setJobs((currentJobs) => updateJob(currentJobs, appliedJob));
 
-        setSavedJobs(loadedJobs);
-
-        if (loadedJobs.shouldEnrichExperience) {
-          void enrichVisibleJobsWithExperience(
-            loadedJobs.jobs,
-            loadedJobs.hiddenJobs,
-          );
-        }
-      } catch (error) {
-        setErrorMessage(getErrorMessage(error));
-      } finally {
-        setIsFetchingJobs(false);
-        isSearchInProgress.current = false;
-        setIsLoading(false);
-      }
-    },
-    [enrichVisibleJobsWithExperience, setSavedJobs],
-  );
-
-  const hideJob = useCallback(
-    (jobToHide: JobResult) => {
-      const nextSavedJobs = hideJobData({
-        jobToHide,
-        jobs,
-        appliedJobs,
-        hiddenJobs,
-        onError: (error) => setErrorMessage(getErrorMessage(error)),
+    try {
+      await saveJobsToSupabase({
+        jobs: [],
+        appliedJobs: [appliedJob],
+        hiddenJobs: [],
       });
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    }
+  }
 
-      setJobs(rehydrateJobs(nextSavedJobs.jobs));
-      setAppliedJobs(rehydrateJobs(nextSavedJobs.appliedJobs));
-      setHiddenJobs(rehydrateJobs(nextSavedJobs.hiddenJobs));
-    },
-    [appliedJobs, hiddenJobs, jobs],
-  );
+  async function hideJob(jobToHide: JobResult) {
+    const hiddenJob = {
+      ...jobToHide,
+      applied: false,
+      hidden: true,
+      hiddenAt: Date.now(),
+    };
 
-  const applyJob = useCallback(
-    (jobToApply: JobResult) => {
+    setJobs((currentJobs) => updateJob(currentJobs, hiddenJob));
+
+    try {
+      await saveJobsToSupabase({
+        jobs: [],
+        appliedJobs: [],
+        hiddenJobs: [hiddenJob],
+      });
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    }
+  }
+
+  async function unhideJob(jobToUnhide: JobResult) {
+    const unhiddenJob = {
+      ...jobToUnhide,
+      applied: false,
+      hidden: false,
+      hiddenAt: undefined,
+    };
+
+    setJobs((currentJobs) => updateJob(currentJobs, unhiddenJob));
+
+    try {
+      await saveJobsToSupabase({
+        jobs: [unhiddenJob],
+        appliedJobs: [],
+        hiddenJobs: [],
+      });
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    }
+  }
+
+  async function cleanupJobs() {
+    setIsCleaningUpJobs(true);
+    setErrorMessage(undefined);
+
+    try {
+      const cleanupResult = await getCleanupResult(activeJobs);
+
       setJobs((currentJobs) =>
         rehydrateJobs(
-          currentJobs.map((job) =>
-            job.id === jobToApply.id ? { ...job, applied: true } : job,
-          ),
+          currentJobs.map((job) => cleanupResult.jobsById.get(job.id) ?? job),
         ),
       );
 
-      window.setTimeout(() => {
-        const nextSavedJobs = applyJobData({
-          jobToApply: { ...jobToApply, applied: true },
-          jobs,
-          appliedJobs,
-          onError: (error) => setErrorMessage(getErrorMessage(error)),
-        });
-
-        setJobs(rehydrateJobs(nextSavedJobs.jobs));
-        setAppliedJobs(rehydrateJobs(nextSavedJobs.appliedJobs));
-      }, applyMoveDelayMs);
-    },
-    [appliedJobs, jobs],
-  );
-
-  const unhideJob = useCallback(
-    (jobToUnhide: JobResult) => {
-      const nextSavedJobs = unhideJobData({
-        jobToUnhide,
-        jobs,
-        hiddenJobs,
-        onError: (error) => setErrorMessage(getErrorMessage(error)),
+      await saveJobsToSupabase({
+        jobs: cleanupResult.visibleJobsToSave,
+        appliedJobs: [],
+        hiddenJobs: cleanupResult.hiddenJobsToSave,
       });
 
-      setJobs(rehydrateJobs(nextSavedJobs.jobs));
-      setHiddenJobs(rehydrateJobs(nextSavedJobs.hiddenJobs));
-    },
-    [hiddenJobs, jobs],
-  );
+      return {
+        hiddenCount: cleanupResult.hiddenJobsToSave.length,
+        experienceUpdatedCount: cleanupResult.experienceUpdatedCount,
+      };
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+
+      return {
+        hiddenCount: 0,
+        experienceUpdatedCount: 0,
+      };
+    } finally {
+      setIsCleaningUpJobs(false);
+    }
+  }
 
   useEffect(() => {
     const initialLoadId = window.setTimeout(() => {
       void loadJobs();
     }, 0);
 
-    const intervalId = window.setInterval(() => {
-      void loadJobs();
-    }, refreshIntervalMs);
-
-    return () => {
-      window.clearTimeout(initialLoadId);
-      window.clearInterval(intervalId);
-    };
-  }, [loadJobs]);
+    return () => window.clearTimeout(initialLoadId);
+    // The initial load should run once on mount; manual refresh uses loadJobs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return {
     jobs,
@@ -199,12 +168,89 @@ export function useJobs() {
     setSelectedExperience,
     isLoading,
     isFetchingJobs,
+    isCleaningUpJobs,
     errorMessage,
     lastUpdatedAt,
     loadJobs,
     hideJob,
     applyJob,
     unhideJob,
+    cleanupJobs,
+  };
+}
+
+function getJobsFromSavedJobs(savedJobs: SavedJobs) {
+  return rehydrateJobs([
+    ...savedJobs.jobs.map((job) => ({
+      ...job,
+      applied: false,
+      hidden: false,
+    })),
+    ...savedJobs.appliedJobs.map((job) => ({
+      ...job,
+      applied: true,
+      hidden: false,
+    })),
+    ...savedJobs.hiddenJobs.map((job) => ({
+      ...job,
+      applied: false,
+      hidden: true,
+    })),
+  ]);
+}
+
+function updateJob(jobs: JobResult[], updatedJob: JobResult) {
+  return rehydrateJobs(
+    jobs.map((job) => (job.id === updatedJob.id ? updatedJob : job)),
+  );
+}
+
+async function getCleanupResult(jobs: JobResult[]) {
+  const jobsById = new Map<string, JobResult>();
+  const visibleJobsToSave: JobResult[] = [];
+  const hiddenJobsToSave: JobResult[] = [];
+  let experienceUpdatedCount = 0;
+
+  for (const job of jobs) {
+    const analysis = await analyzeJob({
+      title: job.title,
+      descriptionText: job.descriptionText,
+    });
+
+    if (!analysis.isUxRelated) {
+      const hiddenJob = {
+        ...job,
+        applied: false,
+        hidden: true,
+        hiddenAt: Date.now(),
+        yearsOfExperience: analysis.yearsOfExperience,
+      };
+
+      jobsById.set(job.id, hiddenJob);
+      hiddenJobsToSave.push(hiddenJob);
+      continue;
+    }
+
+    const updatedJob = {
+      ...job,
+      applied: false,
+      hidden: false,
+      yearsOfExperience: analysis.yearsOfExperience,
+    };
+
+    jobsById.set(job.id, updatedJob);
+
+    if (job.yearsOfExperience !== analysis.yearsOfExperience) {
+      experienceUpdatedCount += 1;
+      visibleJobsToSave.push(updatedJob);
+    }
+  }
+
+  return {
+    jobsById,
+    visibleJobsToSave,
+    hiddenJobsToSave,
+    experienceUpdatedCount,
   };
 }
 

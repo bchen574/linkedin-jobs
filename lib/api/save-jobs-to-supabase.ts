@@ -10,6 +10,7 @@ type SupabaseJob = {
   applyUrl?: string;
   hiddenAt?: number;
   applied?: boolean;
+  hidden?: boolean;
 };
 
 type SaveJobsInput = {
