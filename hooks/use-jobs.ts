@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import { analyzeJob } from "@/lib/api/job-analysis";
 import { saveJobsToSupabase } from "@/lib/api/save-jobs-to-supabase";
-import { loadJobsData } from "@/lib/jobs/api";
+import { enrichJobsWithExperience, loadJobsData } from "@/lib/jobs/api";
 import { getExperienceFilters, getVisibleJobs } from "@/lib/jobs/filters";
 import { rehydrateJobs } from "@/lib/jobs/transforms";
 import type { JobResult, LoadJobsOptions, SavedJobs } from "@/lib/jobs/types";
@@ -47,6 +47,28 @@ export function useJobs() {
       }
 
       setSavedJobs(loadedJobs);
+
+      if (loadedJobs.shouldEnrichExperience) {
+        void enrichJobsWithExperience({
+          jobs: loadedJobs.jobs,
+          hiddenJobs: loadedJobs.hiddenJobs,
+          onJobsUpdated: (updatedJobs) =>
+            setJobs((currentJobs) =>
+              rehydrateJobs([
+                ...updatedJobs,
+                ...currentJobs.filter((job) => job.applied || job.hidden),
+              ]),
+            ),
+          onHiddenJobsUpdated: (updatedHiddenJobs) =>
+            setJobs((currentJobs) =>
+              rehydrateJobs([
+                ...currentJobs.filter((job) => !job.hidden),
+                ...updatedHiddenJobs,
+              ]),
+            ),
+          onError: (error) => setErrorMessage(getErrorMessage(error)),
+        }).catch((error) => setErrorMessage(getErrorMessage(error)));
+      }
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
     } finally {
