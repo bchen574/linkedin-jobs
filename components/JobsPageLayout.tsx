@@ -137,6 +137,7 @@ export function JobsPageLayout({
         <div className="flex flex-wrap gap-2">
           {experienceFilters.map((filter) => (
             <Button
+            className="gap-2 py-4 "
               key={filter.label}
               type="button"
               size="sm"
@@ -146,7 +147,14 @@ export function JobsPageLayout({
               onClick={() => setSelectedExperience(filter.label)}
             >
               {filter.label}
-              <span className="ml-1 inline-flex min-w-5 items-center justify-center bg-muted px-1.5 py-0.5 text-xs font-semibold text-foreground group-data-[variant=default]/button:bg-primary-foreground group-data-[variant=default]/button:text-primary">
+              <span className="  
+              ml-1 inline-flex items-center justify-center
+              min-w-5 px-1.5 py-0.5
+              text-xs font-regular
+              bg-muted text-foreground
+              rounded-sm
+              group-data-[variant=default]/button:bg-primary-foreground 
+              group-data-[variant=default]/button:text-primary">
                 {filter.count}
               </span>
             </Button>
