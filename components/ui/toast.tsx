@@ -69,10 +69,4 @@ function ToastDescription({
   );
 }
 
-export {
-  Toast,
-  ToastDescription,
-  ToastProvider,
-  ToastTitle,
-  ToastViewport,
-};
+export { Toast, ToastDescription, ToastProvider, ToastTitle, ToastViewport };

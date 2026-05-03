@@ -215,7 +215,8 @@ function getExperienceLevelValue(value: unknown) {
 }
 
 function getSortByValue(value: unknown) {
-  return typeof value === "string" && sortByValues.has(value as LinkedInJobSortBy)
+  return typeof value === "string" &&
+    sortByValues.has(value as LinkedInJobSortBy)
     ? (value as LinkedInJobSortBy)
     : undefined;
 }

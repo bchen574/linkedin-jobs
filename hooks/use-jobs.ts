@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { analyzeJob } from "@/lib/api/job-analysis";
+import { deleteHiddenJobsFromSupabase } from "@/lib/api/delete-hidden-jobs";
 import { saveJobsToSupabase } from "@/lib/api/save-jobs-to-supabase";
 import { enrichJobsWithExperience, loadJobsData } from "@/lib/jobs/api";
 import { getExperienceFilters, getVisibleJobs } from "@/lib/jobs/filters";
@@ -14,9 +15,11 @@ export function useJobs() {
   const [isLoading, setIsLoading] = useState(true);
   const [isFetchingJobs, setIsFetchingJobs] = useState(false);
   const [isCleaningUpJobs, setIsCleaningUpJobs] = useState(false);
+  const [isDeletingHiddenJobs, setIsDeletingHiddenJobs] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>();
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date>();
   const [selectedExperience, setSelectedExperience] = useState("All");
+  const hiddenJobsDeletedRef = useRef(false);
 
   const activeJobs = jobs.filter((job) => !job.hidden && !job.applied);
   const appliedJobs = jobs.filter((job) => job.applied);
@@ -54,16 +57,28 @@ export function useJobs() {
           hiddenJobs: loadedJobs.hiddenJobs,
           onJobsUpdated: (updatedJobs) =>
             setJobs((currentJobs) =>
-              rehydrateJobs([
+              combineJobs([
                 ...updatedJobs,
                 ...currentJobs.filter((job) => job.applied || job.hidden),
+                ...loadedJobs.appliedJobs.map((job) => ({
+                  ...job,
+                  applied: true,
+                  hidden: false,
+                })),
+                ...getLoadedHiddenJobs(loadedJobs.hiddenJobs),
               ]),
             ),
           onHiddenJobsUpdated: (updatedHiddenJobs) =>
             setJobs((currentJobs) =>
-              rehydrateJobs([
+              combineJobs([
                 ...currentJobs.filter((job) => !job.hidden),
                 ...updatedHiddenJobs,
+                ...loadedJobs.appliedJobs.map((job) => ({
+                  ...job,
+                  applied: true,
+                  hidden: false,
+                })),
+                ...getLoadedHiddenJobs(loadedJobs.hiddenJobs),
               ]),
             ),
           onError: (error) => setErrorMessage(getErrorMessage(error)),
@@ -135,6 +150,22 @@ export function useJobs() {
     }
   }
 
+  async function deleteHiddenJobs() {
+    hiddenJobsDeletedRef.current = true;
+    setIsDeletingHiddenJobs(true);
+    setErrorMessage(undefined);
+    setJobs((currentJobs) => currentJobs.filter((job) => !job.hidden));
+
+    try {
+      await deleteHiddenJobsFromSupabase();
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+      void loadJobs();
+    } finally {
+      setIsDeletingHiddenJobs(false);
+    }
+  }
+
   async function cleanupJobs() {
     setIsCleaningUpJobs(true);
     setErrorMessage(undefined);
@@ -191,14 +222,28 @@ export function useJobs() {
     isLoading,
     isFetchingJobs,
     isCleaningUpJobs,
+    isDeletingHiddenJobs,
     errorMessage,
     lastUpdatedAt,
     loadJobs,
     hideJob,
     applyJob,
     unhideJob,
+    deleteHiddenJobs,
     cleanupJobs,
   };
+
+  function getLoadedHiddenJobs(loadedHiddenJobs: JobResult[]) {
+    if (hiddenJobsDeletedRef.current) {
+      return [];
+    }
+
+    return loadedHiddenJobs.map((job) => ({
+      ...job,
+      applied: false,
+      hidden: true,
+    }));
+  }
 }
 
 function getJobsFromSavedJobs(savedJobs: SavedJobs) {
@@ -225,6 +270,18 @@ function updateJob(jobs: JobResult[], updatedJob: JobResult) {
   return rehydrateJobs(
     jobs.map((job) => (job.id === updatedJob.id ? updatedJob : job)),
   );
+}
+
+function combineJobs(jobs: JobResult[]) {
+  const jobsById = new Map<string, JobResult>();
+
+  for (const job of jobs) {
+    if (!jobsById.has(job.id)) {
+      jobsById.set(job.id, job);
+    }
+  }
+
+  return rehydrateJobs(Array.from(jobsById.values()));
 }
 
 async function getCleanupResult(jobs: JobResult[]) {

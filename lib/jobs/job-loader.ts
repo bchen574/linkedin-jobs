@@ -42,12 +42,15 @@ export async function loadJobsData({
 
   const results = await searchWideNetJobs({
     count: jobsFetchLimit,
-    postedWithin: options.postedWithin ?? getPostedWithinForSavedJobs(savedJobs),
+    postedWithin:
+      options.postedWithin ?? getPostedWithinForSavedJobs(savedJobs),
   });
 
   const fetchedAt = Date.now();
   const fetchedJobs = normalizeJobs(results);
-  const savedVisibleJobs = options.replaceVisible ? [] : (savedJobs?.jobs ?? []);
+  const savedVisibleJobs = options.replaceVisible
+    ? []
+    : (savedJobs?.jobs ?? []);
   const mergedJobs = mergeJobs(fetchedJobs, savedVisibleJobs);
   const jobs = filterUnavailableJobs(mergedJobs, savedJobs);
   const appliedJobs = savedJobs?.appliedJobs ?? [];
@@ -69,10 +72,7 @@ export async function loadJobsData({
   };
 }
 
-function shouldUseCache(
-  savedJobs: SavedJobs,
-  options: LoadJobsOptions,
-) {
+function shouldUseCache(savedJobs: SavedJobs, options: LoadJobsOptions) {
   if (options.force) {
     return false;
   }

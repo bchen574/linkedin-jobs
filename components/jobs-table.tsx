@@ -12,6 +12,18 @@ import {
   JobCards,
 } from "@/components/jobs-table-shared";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import {
   Toast,
   ToastDescription,
   ToastProvider,
@@ -25,6 +37,8 @@ type CleanupToast = {
   experienceUpdatedCount: number;
 };
 
+const jobActionDelayMs = 350;
+
 export function JobsTable() {
   const {
     jobs,
@@ -37,12 +51,14 @@ export function JobsTable() {
     isLoading,
     isFetchingJobs,
     isCleaningUpJobs,
+    isDeletingHiddenJobs,
     errorMessage,
     lastUpdatedAt,
     loadJobs,
     hideJob,
     applyJob,
     unhideJob,
+    deleteHiddenJobs,
     cleanupJobs,
   } = useJobs();
   const [isAppliedJobsOpen, setIsAppliedJobsOpen] = useState(false);
@@ -55,6 +71,18 @@ export function JobsTable() {
     setCleanupToast(cleanupResult);
 
     return cleanupResult;
+  }
+
+  function applyJobWithDelay(job: Parameters<typeof applyJob>[0]) {
+    window.setTimeout(() => {
+      void applyJob(job);
+    }, jobActionDelayMs);
+  }
+
+  function hideJobWithDelay(job: Parameters<typeof hideJob>[0]) {
+    window.setTimeout(() => {
+      void hideJob(job);
+    }, jobActionDelayMs);
   }
 
   return (
@@ -75,8 +103,8 @@ export function JobsTable() {
             jobs={visibleJobs}
             isLoading={isLoading}
             emptyMessage="No jobs found."
-            onApply={applyJob}
-            onHide={hideJob}
+            onApply={applyJobWithDelay}
+            onHide={hideJobWithDelay}
           />
           <p className="mt-3 text-center text-xs text-muted-foreground">
             {getTableCaption({
@@ -92,8 +120,8 @@ export function JobsTable() {
           jobs={visibleJobs}
           allJobs={jobs}
           isLoading={isLoading}
-          onApply={applyJob}
-          onHide={hideJob}
+          onApply={applyJobWithDelay}
+          onHide={hideJobWithDelay}
           lastUpdatedAt={lastUpdatedAt}
         />
 
@@ -124,6 +152,36 @@ export function JobsTable() {
           isOpen={isHiddenJobsOpen}
           onOpenChange={setIsHiddenJobsOpen}
         >
+          <div className="flex justify-end">
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={!hiddenJobs.length || isDeletingHiddenJobs}
+                >
+                  Delete all Hidden Jobs
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete all hidden jobs?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This permanently removes every hidden job from storage.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => void deleteHiddenJobs()}
+                    disabled={isDeletingHiddenJobs}
+                  >
+                    Delete all Hidden Jobs
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
           <div className="md:hidden">
             <JobCards
               jobs={hiddenJobs}

@@ -105,6 +105,37 @@ export async function POST(request: Request) {
   }
 }
 
+export async function DELETE() {
+  const supabaseUrl =
+    process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseSecretKey =
+    process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !supabaseSecretKey) {
+    return Response.json({ skipped: true }, { status: 200 });
+  }
+
+  try {
+    await deleteHiddenRows({
+      supabaseUrl,
+      supabaseSecretKey,
+      tableName: process.env.SUPABASE_JOBS_TABLE ?? defaultTableName,
+    });
+
+    return Response.json({ deleted: true }, { status: 200 });
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      console.error("ERROR:", error.message);
+
+      return Response.json({ error: error.message }, { status: 500 });
+    }
+
+    console.error("UNKNOWN ERROR:", error);
+
+    return Response.json({ error: "Something went wrong" }, { status: 500 });
+  }
+}
+
 async function deleteVisibleRows({
   supabaseUrl,
   supabaseSecretKey,
@@ -118,6 +149,33 @@ async function deleteVisibleRows({
 
   url.searchParams.set("hidden", "eq.false");
   url.searchParams.set("applied", "eq.false");
+
+  const response = await fetch(url, {
+    method: "DELETE",
+    headers: {
+      apikey: supabaseSecretKey,
+      Authorization: `Bearer ${supabaseSecretKey}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(await getSupabaseErrorMessage(response));
+  }
+}
+
+async function deleteHiddenRows({
+  supabaseUrl,
+  supabaseSecretKey,
+  tableName,
+}: {
+  supabaseUrl: string;
+  supabaseSecretKey: string;
+  tableName: string;
+}) {
+  const url = new URL(`/rest/v1/${tableName}`, supabaseUrl);
+
+  url.searchParams.set("hidden", "eq.true");
 
   const response = await fetch(url, {
     method: "DELETE",
@@ -284,9 +342,7 @@ function getRow(
     posted_at: getDateValue(postedAtTimestamp),
     posted_at_timestamp: postedAtTimestamp,
     years_of_experience:
-      typeof job.yearsOfExperience === "string"
-        ? job.yearsOfExperience
-        : null,
+      typeof job.yearsOfExperience === "string" ? job.yearsOfExperience : null,
     linkedin_url: typeof job.linkedInUrl === "string" ? job.linkedInUrl : null,
     apply_url: typeof job.applyUrl === "string" ? job.applyUrl : null,
     hidden: status.hidden,
