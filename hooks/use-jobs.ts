@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import { analyzeJob } from "@/lib/api/job-analysis";
 import { deleteHiddenJobsFromSupabase } from "@/lib/api/delete-hidden-jobs";
 import { saveJobsToSupabase } from "@/lib/api/save-jobs-to-supabase";
 import { enrichJobsWithExperience, loadJobsData } from "@/lib/jobs/api";
 import { getExperienceFilters, getVisibleJobs } from "@/lib/jobs/filters";
+import { refreshIntervalMs } from "@/lib/jobs/job-constants";
 import { rehydrateJobs } from "@/lib/jobs/transforms";
 import type {
   ApplicationStatus,
@@ -259,6 +260,45 @@ export function useJobs() {
     // The initial load should run once on mount; manual refresh uses loadJobs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const refreshJobsIfStale = useEffectEvent(() => {
+    if (isLoading || isFetchingJobs || !lastUpdatedAt) {
+      return;
+    }
+
+    const cacheAgeMs = Date.now() - lastUpdatedAt.getTime();
+
+    if (cacheAgeMs < refreshIntervalMs) {
+      return;
+    }
+
+    void loadJobs();
+  });
+
+  useEffect(() => {
+    if (!lastUpdatedAt) {
+      return;
+    }
+
+    const cacheAgeMs = Date.now() - lastUpdatedAt.getTime();
+    const msUntilRefresh = Math.max(refreshIntervalMs - cacheAgeMs, 0);
+    const refreshTimerId = window.setTimeout(() => {
+      refreshJobsIfStale();
+    }, msUntilRefresh);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshJobsIfStale();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearTimeout(refreshTimerId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [lastUpdatedAt, refreshJobsIfStale]);
 
   return {
     jobs,
