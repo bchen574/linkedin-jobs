@@ -57,6 +57,8 @@ export function JobsTable() {
     loadJobs,
     hideJob,
     applyJob,
+    unapplyJob,
+    updateApplicationStatus,
     unhideJob,
     deleteHiddenJobs,
     cleanupJobs,
@@ -143,7 +145,11 @@ export function JobsTable() {
                 : "No applied jobs."}
             </p>
           </div>
-          <AppliedJobsTable jobs={appliedJobs} />
+          <AppliedJobsTable
+            jobs={appliedJobs}
+            onStatusChange={updateApplicationStatus}
+            onUnapply={unapplyJob}
+          />
         </CollapsibleJobsSection>
 
         <CollapsibleJobsSection

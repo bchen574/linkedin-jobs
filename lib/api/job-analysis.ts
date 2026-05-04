@@ -12,7 +12,7 @@ export async function analyzeJob({
   title,
   descriptionText,
 }: JobAnalysisInput): Promise<JobAnalysisResult> {
-  const body = await fetchJobAnalysis({ title, descriptionText });
+  const body = await postJobAnalysis({ title, descriptionText });
 
   return {
     yearsOfExperience:
@@ -24,7 +24,22 @@ export async function analyzeJob({
   };
 }
 
-async function fetchJobAnalysis(input: JobAnalysisInput) {
+export async function analyzeJobs(
+  jobs: JobAnalysisInput[],
+): Promise<JobAnalysisResult[]> {
+  if (!jobs.length) {
+    return [];
+  }
+
+  const body = await postJobAnalysis({ jobs });
+  const analyzedJobs = Array.isArray(body.jobs) ? body.jobs : [];
+
+  return jobs.map((_, index) => getJobAnalysisResult(analyzedJobs[index]));
+}
+
+async function postJobAnalysis(input: JobAnalysisInput | {
+  jobs: JobAnalysisInput[];
+}) {
   const response = await fetch("/api/job-experience", {
     method: "POST",
     headers: {
@@ -38,6 +53,26 @@ async function fetchJobAnalysis(input: JobAnalysisInput) {
   }
 
   return response.json();
+}
+
+function getJobAnalysisResult(value: unknown): JobAnalysisResult {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {
+      yearsOfExperience: "Not specified",
+      isUxRelated: true,
+    };
+  }
+
+  const result = value as Record<string, unknown>;
+
+  return {
+    yearsOfExperience:
+      typeof result.yearsOfExperience === "string"
+        ? result.yearsOfExperience
+        : "Not specified",
+    isUxRelated:
+      typeof result.isUxRelated === "boolean" ? result.isUxRelated : true,
+  };
 }
 
 async function getJobAnalysisErrorMessage(response: Response) {

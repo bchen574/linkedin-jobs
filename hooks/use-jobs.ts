@@ -8,7 +8,12 @@ import { saveJobsToSupabase } from "@/lib/api/save-jobs-to-supabase";
 import { enrichJobsWithExperience, loadJobsData } from "@/lib/jobs/api";
 import { getExperienceFilters, getVisibleJobs } from "@/lib/jobs/filters";
 import { rehydrateJobs } from "@/lib/jobs/transforms";
-import type { JobResult, LoadJobsOptions, SavedJobs } from "@/lib/jobs/types";
+import type {
+  ApplicationStatus,
+  JobResult,
+  LoadJobsOptions,
+  SavedJobs,
+} from "@/lib/jobs/types";
 
 export function useJobs() {
   const [jobs, setJobs] = useState<JobResult[]>([]);
@@ -101,6 +106,50 @@ export function useJobs() {
       await saveJobsToSupabase({
         jobs: [],
         appliedJobs: [appliedJob],
+        hiddenJobs: [],
+      });
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    }
+  }
+
+  async function unapplyJob(jobToUnapply: JobResult) {
+    const unappliedJob = {
+      ...jobToUnapply,
+      applied: false,
+      hidden: false,
+    };
+
+    setJobs((currentJobs) => updateJob(currentJobs, unappliedJob));
+
+    try {
+      await saveJobsToSupabase({
+        jobs: [unappliedJob],
+        appliedJobs: [],
+        hiddenJobs: [],
+      });
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    }
+  }
+
+  async function updateApplicationStatus(
+    jobToUpdate: JobResult,
+    applicationStatus: ApplicationStatus,
+  ) {
+    const updatedJob = {
+      ...jobToUpdate,
+      applied: true,
+      hidden: false,
+      applicationStatus,
+    };
+
+    setJobs((currentJobs) => updateJob(currentJobs, updatedJob));
+
+    try {
+      await saveJobsToSupabase({
+        jobs: [],
+        appliedJobs: [updatedJob],
         hiddenJobs: [],
       });
     } catch (error) {
@@ -228,6 +277,8 @@ export function useJobs() {
     loadJobs,
     hideJob,
     applyJob,
+    unapplyJob,
+    updateApplicationStatus,
     unhideJob,
     deleteHiddenJobs,
     cleanupJobs,

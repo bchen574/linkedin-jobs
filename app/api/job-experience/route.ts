@@ -1,9 +1,11 @@
 type JobExperienceRequest = {
   title?: unknown;
   descriptionText?: unknown;
+  jobs?: unknown;
 };
 
 const model = "gpt-4.1-mini";
+const maxBatchSize = 10;
 
 export async function POST(request: Request) {
   if (!process.env.OPENAI_API_KEY) {
@@ -15,6 +17,24 @@ export async function POST(request: Request) {
 
   try {
     const input = (await request.json()) as JobExperienceRequest;
+
+    if (Array.isArray(input.jobs)) {
+      const jobs = input.jobs
+        .map(getJobAnalysisInput)
+        .filter((job): job is JobAnalysisInput => Boolean(job));
+
+      if (!jobs.length) {
+        return Response.json(
+          { error: "At least one job title or description text is required" },
+          { status: 400 },
+        );
+      }
+
+      const jobAnalyses = await getJobAnalyses(jobs.slice(0, maxBatchSize));
+
+      return Response.json({ jobs: jobAnalyses }, { status: 200 });
+    }
+
     const title = typeof input.title === "string" ? input.title.trim() : "";
     const descriptionText =
       typeof input.descriptionText === "string"
@@ -45,13 +65,46 @@ export async function POST(request: Request) {
   }
 }
 
+type JobAnalysisInput = {
+  title: string;
+  descriptionText: string;
+};
+
+type JobAnalysisResult = {
+  yearsOfExperience: string;
+  isUxRelated: boolean;
+};
+
+function getJobAnalysisInput(value: unknown): JobAnalysisInput | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const title = typeof value.title === "string" ? value.title.trim() : "";
+  const descriptionText =
+    typeof value.descriptionText === "string"
+      ? value.descriptionText.trim()
+      : "";
+
+  if (!title && !descriptionText) {
+    return undefined;
+  }
+
+  return { title, descriptionText };
+}
+
 async function getJobAnalysis({
   title,
   descriptionText,
-}: {
-  title: string;
-  descriptionText: string;
-}) {
+}: JobAnalysisInput): Promise<JobAnalysisResult> {
+  const jobAnalyses = await getJobAnalyses([{ title, descriptionText }]);
+
+  return jobAnalyses[0] ?? getFallbackJobAnalysis();
+}
+
+async function getJobAnalyses(
+  jobs: JobAnalysisInput[],
+): Promise<JobAnalysisResult[]> {
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -69,6 +122,9 @@ You are a strict job classifier.
 Your tasks:
 1) Extract the required years of professional experience.
 2) Determine if this role is UX-related.
+
+You may receive one job or a JSON array of jobs. Return one result per input
+job, in the same order.
 
 A role is UX-related if:
 - It involves designing user experiences, interfaces, or conducting user research.
@@ -122,7 +178,13 @@ Be consistent and apply rules strictly.
         },
         {
           role: "user",
-          content: `Job title:\n${title || "Unknown"}\n\nJob description:\n${descriptionText || "Not provided"}`,
+          content: JSON.stringify(
+            jobs.map((job, index) => ({
+              index,
+              title: job.title || "Unknown",
+              descriptionText: job.descriptionText || "Not provided",
+            })),
+          ),
         },
       ],
       text: {
@@ -134,24 +196,34 @@ Be consistent and apply rules strictly.
             type: "object",
             additionalProperties: false,
             properties: {
-              yearsOfExperience: {
-                type: "string",
-                enum: [
-                  "Not specified",
-                  "0-1 years",
-                  "1-2 years",
-                  "2-3 years",
-                  "3-5 years",
-                  "5-7 years",
-                  "7-10 years",
-                  "10+ years",
-                ],
-              },
-              isUxRelated: {
-                type: "boolean",
+              jobs: {
+                type: "array",
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    yearsOfExperience: {
+                      type: "string",
+                      enum: [
+                        "Not specified",
+                        "0-1 years",
+                        "1-2 years",
+                        "2-3 years",
+                        "3-5 years",
+                        "5-7 years",
+                        "7-10 years",
+                        "10+ years",
+                      ],
+                    },
+                    isUxRelated: {
+                      type: "boolean",
+                    },
+                  },
+                  required: ["yearsOfExperience", "isUxRelated"],
+                },
               },
             },
-            required: ["yearsOfExperience", "isUxRelated"],
+            required: ["jobs"],
           },
         },
       },
@@ -165,16 +237,34 @@ Be consistent and apply rules strictly.
   const body = await response.json();
   const outputText = getOutputText(body);
   const parsedOutput = JSON.parse(outputText);
+  const parsedJobs = isRecord(parsedOutput) ? parsedOutput.jobs : undefined;
+
+  if (!Array.isArray(parsedJobs)) {
+    return jobs.map(getFallbackJobAnalysis);
+  }
+
+  return jobs.map((_, index) => getParsedJobAnalysis(parsedJobs[index]));
+}
+
+function getParsedJobAnalysis(value: unknown): JobAnalysisResult {
+  if (!isRecord(value)) {
+    return getFallbackJobAnalysis();
+  }
 
   return {
     yearsOfExperience:
-      typeof parsedOutput.yearsOfExperience === "string"
-        ? parsedOutput.yearsOfExperience
+      typeof value.yearsOfExperience === "string"
+        ? value.yearsOfExperience
         : "Not specified",
     isUxRelated:
-      typeof parsedOutput.isUxRelated === "boolean"
-        ? parsedOutput.isUxRelated
-        : true,
+      typeof value.isUxRelated === "boolean" ? value.isUxRelated : true,
+  };
+}
+
+function getFallbackJobAnalysis(): JobAnalysisResult {
+  return {
+    yearsOfExperience: "Not specified",
+    isUxRelated: true,
   };
 }
 

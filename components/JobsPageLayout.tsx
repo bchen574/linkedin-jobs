@@ -61,6 +61,7 @@ export function JobsPageLayout({
           <h1 className="text-3xl font-medium tracking-normal">
             UX Design Jobs on LinkedIn
           </h1>
+
           <p className="mt-2 mb-4 text-sm text-muted-foreground">
             Your LinkedIn job search organized and enriched with AI.
           </p>

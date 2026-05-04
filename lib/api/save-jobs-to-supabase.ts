@@ -11,6 +11,7 @@ type SupabaseJob = {
   hiddenAt?: number;
   applied?: boolean;
   hidden?: boolean;
+  applicationStatus?: string;
 };
 
 type SaveJobsInput = {

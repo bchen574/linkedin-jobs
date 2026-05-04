@@ -15,7 +15,17 @@ export type JobResult = {
   hiddenAt?: number;
   applied?: boolean;
   hidden?: boolean;
+  applicationStatus?: ApplicationStatus;
 };
+
+export type ApplicationStatus =
+  | "TBD"
+  | "Screening"
+  | "Interview-1"
+  | "Interview-2"
+  | "Interview-3"
+  | "Offer"
+  | "Rejected";
 
 // The persisted job cache split into visible, applied, and hidden jobs.
 export type SavedJobs = {
