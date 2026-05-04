@@ -423,56 +423,39 @@ async function beginFetchLock({
   });
 
   const now = Date.now();
-  const staleFetchStartedBefore = new Date(now - maxFetchTimeMs).toISOString();
-  const staleLastFetchedBefore = new Date(now - twoHoursMs).toISOString();
-  const url = new URL(`/rest/v1/${tableName}`, supabaseUrl);
-
-  url.searchParams.set("id", `eq.${globalMetaId}`);
-  url.searchParams.set(
-    "or",
-    `(fetch_started_at.is.null,fetch_started_at.lt.${staleFetchStartedBefore})`,
-  );
-
-  if (!force) {
-    url.searchParams.set(
-      "and",
-      `(or(last_fetched_at.is.null,last_fetched_at.lt.${staleLastFetchedBefore}))`,
-    );
-  }
-
-  const response = await fetch(url, {
-    method: "PATCH",
-    headers: {
-      ...getSupabaseHeaders(supabaseSecretKey),
-      Prefer: "return=representation",
-    },
-    body: JSON.stringify({
-      fetch_started_at: new Date(now).toISOString(),
-      updated_at: new Date(now).toISOString(),
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(await getSupabaseErrorMessage(response));
-  }
-
-  const rows = await response.json();
-
-  if (Array.isArray(rows) && rows.length > 0) {
-    return { started: true };
-  }
-
   const meta = await getJobsMetaFromSupabase({
     supabaseUrl,
     supabaseSecretKey,
     tableName,
   });
 
-  return {
-    started: false,
-    reason: getFetchSkipReason(meta, now),
-    fetchedAt: meta.lastFetchedAt ?? 0,
-  };
+  if (isFetchInProgress(meta, now)) {
+    return {
+      started: false,
+      reason: "in_progress" as const,
+      fetchedAt: meta.lastFetchedAt ?? 0,
+    };
+  }
+
+  if (!force && isFetchStillFresh(meta, now)) {
+    return {
+      started: false,
+      reason: "fresh" as const,
+      fetchedAt: meta.lastFetchedAt ?? 0,
+    };
+  }
+
+  await updateFetchMeta({
+    values: {
+      fetch_started_at: new Date(now).toISOString(),
+      updated_at: new Date(now).toISOString(),
+    },
+    supabaseUrl,
+    supabaseSecretKey,
+    tableName,
+  });
+
+  return { started: true };
 }
 
 async function updateFetchMeta({
@@ -646,7 +629,7 @@ function getJobsResponse(
     jobs,
     appliedJobs,
     hiddenJobs,
-    fetchedAt: meta.lastFetchedAt ?? getLatestUpdatedAt(rows),
+    fetchedAt: meta.lastFetchedAt ?? 0,
     fetchStartedAt: meta.fetchStartedAt,
   };
 }
@@ -708,29 +691,28 @@ function getApplicationStatus(value: unknown) {
   return undefined;
 }
 
-function getLatestUpdatedAt(rows: Record<string, unknown>[]) {
-  return rows.reduce((latestTimestamp, row) => {
-    const updatedAt = getTimestampValue(row.updated_at) ?? 0;
-
-    return Math.max(latestTimestamp, updatedAt);
-  }, 0);
-}
-
-function getFetchSkipReason(
+function isFetchInProgress(
   meta: {
     lastFetchedAt?: number;
     fetchStartedAt?: number;
   },
   now: number,
 ) {
-  if (
-    meta.fetchStartedAt &&
-    now - meta.fetchStartedAt < maxFetchTimeMs
-  ) {
-    return "in_progress";
-  }
+  return Boolean(
+    meta.fetchStartedAt && now - meta.fetchStartedAt < maxFetchTimeMs,
+  );
+}
 
-  return "fresh";
+function isFetchStillFresh(
+  meta: {
+    lastFetchedAt?: number;
+    fetchStartedAt?: number;
+  },
+  now: number,
+) {
+  return Boolean(
+    meta.lastFetchedAt && now - meta.lastFetchedAt < twoHoursMs,
+  );
 }
 
 function getSupabaseHeaders(supabaseSecretKey: string) {

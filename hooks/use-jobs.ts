@@ -35,7 +35,13 @@ export function useJobs() {
 
   function setSavedJobs(savedJobs: SavedJobs) {
     setJobs(getJobsFromSavedJobs(savedJobs));
-    setLastUpdatedAt(new Date(savedJobs.fetchedAt));
+
+    if (savedJobs.fetchedAt > 0) {
+      setLastUpdatedAt(new Date(savedJobs.fetchedAt));
+      return;
+    }
+
+    setLastUpdatedAt(undefined);
   }
 
   async function loadJobs(options: LoadJobsOptions = {}) {
@@ -272,7 +278,7 @@ export function useJobs() {
       return;
     }
 
-    void loadJobs();
+    void loadJobs({ force: true });
   });
 
   useEffect(() => {

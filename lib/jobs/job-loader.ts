@@ -46,13 +46,17 @@ export async function loadJobsData({
   const fetchLock = await beginJobFetch({ force: options.force });
 
   if (!fetchLock.started) {
-    return savedJobs
-      ? {
-          ...savedJobs,
-          fetchedAt: fetchLock.fetchedAt ?? savedJobs.fetchedAt,
-          shouldEnrichExperience: false,
-        }
-      : undefined;
+    const latestSavedJobs = await readSavedJobs();
+
+    if (!latestSavedJobs) {
+      return undefined;
+    }
+
+    return {
+      ...latestSavedJobs,
+      fetchedAt: fetchLock.fetchedAt ?? latestSavedJobs.fetchedAt,
+      shouldEnrichExperience: false,
+    };
   }
 
   onFetchStart();
