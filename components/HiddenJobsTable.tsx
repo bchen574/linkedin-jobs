@@ -2,6 +2,7 @@
 
 import { ArrowSquareOut, Eye } from "@phosphor-icons/react";
 
+import { JobDescriptionSheet } from "@/components/jobs-table-shared";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -18,7 +19,8 @@ import { cn } from "@/lib/utils";
 
 const tableColumns = [
   "w-80",
-  "w-20",
+  "w-8",
+  "w-12",
   "w-20",
   "",
   "",
@@ -46,12 +48,16 @@ export function HiddenJobsTable({
                   className={cn(tableColumns[1], "px-1 text-center")}
                   aria-label="LinkedIn"
                 />
-                <TableHead className={tableColumns[2]}>Posted</TableHead>
-                <TableHead className={tableColumns[3]}>Company</TableHead>
-                <TableHead className={tableColumns[4]}>Location</TableHead>
-                <TableHead className={tableColumns[5]}>Experience</TableHead>
                 <TableHead
-                  className={cn(tableColumns[6], "px-1 text-center")}
+                  className={cn(tableColumns[2], "px-1 text-center")}
+                  aria-label="Description"
+                />
+                <TableHead className={tableColumns[3]}>Posted</TableHead>
+                <TableHead className={tableColumns[4]}>Company</TableHead>
+                <TableHead className={tableColumns[5]}>Location</TableHead>
+                <TableHead className={tableColumns[6]}>Experience</TableHead>
+                <TableHead
+                  className={cn(tableColumns[7], "px-1 text-center")}
                   aria-label="Restore"
                 />
               </TableRow>
@@ -93,24 +99,19 @@ export function HiddenJobsTable({
                       <span className="text-sm text-muted-foreground">-</span>
                     )}
                   </TableCell>
+                  <TableCell className={cn(tableColumns[2], "text-center")}>
+                    <JobDescriptionSheet job={job} />
+                  </TableCell>
                   <TableCell
                     className={cn(
-                      tableColumns[2],
+                      tableColumns[3],
                       "truncate text-muted-foreground",
                     )}
                   >
                     {job.postedAt}
                   </TableCell>
-                  <TableCell className={cn(tableColumns[3], "truncate")}>
+                  <TableCell className={cn(tableColumns[4], "truncate")}>
                     {job.company}
-                  </TableCell>
-                  <TableCell
-                    className={cn(
-                      tableColumns[4],
-                      "truncate text-muted-foreground",
-                    )}
-                  >
-                    {job.location}
                   </TableCell>
                   <TableCell
                     className={cn(
@@ -118,9 +119,17 @@ export function HiddenJobsTable({
                       "truncate text-muted-foreground",
                     )}
                   >
+                    {job.location}
+                  </TableCell>
+                  <TableCell
+                    className={cn(
+                      tableColumns[6],
+                      "truncate text-muted-foreground",
+                    )}
+                  >
                     {job.yearsOfExperience ?? "Not checked"}
                   </TableCell>
-                  <TableCell className={cn(tableColumns[6], "text-center")}>
+                  <TableCell className={cn(tableColumns[7], "text-center")}>
                     <Button
                       type="button"
                       size="icon-sm"
@@ -137,7 +146,7 @@ export function HiddenJobsTable({
               {!jobs.length ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={8}
                     className="h-20 text-center text-muted-foreground"
                   >
                     Hidden jobs will appear here.

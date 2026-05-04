@@ -49,6 +49,7 @@ export function normalizeJob(result: unknown, index: number): JobResult {
   ]);
   const hiddenAt = getFirstNumber(job, ["hiddenAt", "hidden_at"]);
   const applied = getFirstBoolean(job, ["applied"]);
+  const applicationStatus = getApplicationStatus(job.applicationStatus);
   const id = linkedInJobId ?? applyUrl;
 
   return {
@@ -64,6 +65,7 @@ export function normalizeJob(result: unknown, index: number): JobResult {
     applyUrl,
     hiddenAt,
     applied,
+    applicationStatus,
   };
 }
 
@@ -195,6 +197,22 @@ function getFirstBoolean(record: Record<string, unknown>, keys: string[]) {
     if (typeof value === "boolean") {
       return value;
     }
+  }
+
+  return undefined;
+}
+
+function getApplicationStatus(value: unknown) {
+  if (
+    value === "TBD" ||
+    value === "Screening" ||
+    value === "Interview-1" ||
+    value === "Interview-2" ||
+    value === "Interview-3" ||
+    value === "Offer" ||
+    value === "Rejected"
+  ) {
+    return value;
   }
 
   return undefined;

@@ -26,3 +26,14 @@ create index if not exists linkedin_jobs_applied_idx
 
 create index if not exists linkedin_jobs_years_of_experience_idx
   on public.linkedin_jobs (years_of_experience);
+
+create table if not exists public.jobs_meta (
+  id text primary key,
+  last_fetched_at timestamptz,
+  fetch_started_at timestamptz,
+  updated_at timestamptz not null default now()
+);
+
+insert into public.jobs_meta (id)
+values ('global')
+on conflict (id) do nothing;

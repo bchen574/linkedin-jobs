@@ -1,4 +1,9 @@
 import { saveJobsToSupabase } from "@/lib/api/save-jobs-to-supabase";
+import {
+  beginJobFetch,
+  failJobFetch,
+  finishJobFetch,
+} from "@/lib/api/job-fetch-lock";
 import { searchWideNetJobs } from "@/lib/api/search-jobs";
 import { jobsFetchLimit } from "@/lib/jobs/job-constants";
 import {
@@ -38,38 +43,56 @@ export async function loadJobsData({
     };
   }
 
+  const fetchLock = await beginJobFetch({ force: options.force });
+
+  if (!fetchLock.started) {
+    return savedJobs
+      ? {
+          ...savedJobs,
+          fetchedAt: fetchLock.fetchedAt ?? savedJobs.fetchedAt,
+          shouldEnrichExperience: false,
+        }
+      : undefined;
+  }
+
   onFetchStart();
 
-  const results = await searchWideNetJobs({
-    count: jobsFetchLimit,
-    postedWithin:
-      options.postedWithin ?? getPostedWithinForSavedJobs(savedJobs),
-  });
+  try {
+    const results = await searchWideNetJobs({
+      count: jobsFetchLimit,
+      postedWithin:
+        options.postedWithin ?? getPostedWithinForSavedJobs(savedJobs),
+    });
 
-  const fetchedAt = Date.now();
-  const fetchedJobs = normalizeJobs(results);
-  const savedVisibleJobs = options.replaceVisible
-    ? []
-    : (savedJobs?.jobs ?? []);
-  const mergedJobs = mergeJobs(fetchedJobs, savedVisibleJobs);
-  const jobs = filterUnavailableJobs(mergedJobs, savedJobs);
-  const appliedJobs = savedJobs?.appliedJobs ?? [];
-  const hiddenJobs = savedJobs?.hiddenJobs ?? [];
+    const fetchedAt = Date.now();
+    const fetchedJobs = normalizeJobs(results);
+    const savedVisibleJobs = options.replaceVisible
+      ? []
+      : (savedJobs?.jobs ?? []);
+    const mergedJobs = mergeJobs(fetchedJobs, savedVisibleJobs);
+    const jobs = filterUnavailableJobs(mergedJobs, savedJobs);
+    const appliedJobs = savedJobs?.appliedJobs ?? [];
+    const hiddenJobs = savedJobs?.hiddenJobs ?? [];
 
-  void saveJobsToSupabase({
-    jobs,
-    appliedJobs,
-    hiddenJobs,
-    replaceVisible: options.replaceVisible,
-  }).catch(onError);
+    await saveJobsToSupabase({
+      jobs,
+      appliedJobs,
+      hiddenJobs,
+      replaceVisible: options.replaceVisible,
+    });
+    await finishJobFetch();
 
-  return {
-    fetchedAt,
-    jobs,
-    appliedJobs,
-    hiddenJobs,
-    shouldEnrichExperience: true,
-  };
+    return {
+      fetchedAt,
+      jobs,
+      appliedJobs,
+      hiddenJobs,
+      shouldEnrichExperience: true,
+    };
+  } catch (error) {
+    await failJobFetch().catch(onError);
+    throw error;
+  }
 }
 
 function shouldUseCache(savedJobs: SavedJobs, options: LoadJobsOptions) {

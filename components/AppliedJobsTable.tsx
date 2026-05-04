@@ -13,6 +13,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { JobDescriptionSheet } from "@/components/jobs-table-shared";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -38,7 +39,8 @@ import { cn } from "@/lib/utils";
 
 const tableColumns = [
   "w-80",
-  "w-20",
+  "w-8",
+  "w-12",
   "w-20",
   "",
   "",
@@ -78,12 +80,16 @@ export function AppliedJobsTable({
                   className={cn(tableColumns[1], "px-1 text-center")}
                   aria-label="LinkedIn"
                 />
-                <TableHead className={tableColumns[2]}>Posted</TableHead>
-                <TableHead className={tableColumns[3]}>Company</TableHead>
-                <TableHead className={tableColumns[4]}>Location</TableHead>
-                <TableHead className={tableColumns[5]}>Experience</TableHead>
-                <TableHead className={tableColumns[6]}>Status</TableHead>
-                <TableHead className={cn(tableColumns[7], "text-center")}>
+                <TableHead
+                  className={cn(tableColumns[2], "px-1 text-center")}
+                  aria-label="Description"
+                />
+                <TableHead className={tableColumns[3]}>Posted</TableHead>
+                <TableHead className={tableColumns[4]}>Company</TableHead>
+                <TableHead className={tableColumns[5]}>Location</TableHead>
+                <TableHead className={tableColumns[6]}>Experience</TableHead>
+                <TableHead className={tableColumns[7]}>Status</TableHead>
+                <TableHead className={cn(tableColumns[8], "text-center")}>
                   Applied
                 </TableHead>
               </TableRow>
@@ -94,7 +100,9 @@ export function AppliedJobsTable({
         <ScrollArea className="max-h-[calc(70vh-2.5rem)] [&_[data-slot=scroll-area-viewport]]:max-h-[calc(70vh-2.5rem)]">
           <Table className="table-fixed ">
             <TableCaption className=" pb-6">
-              {jobs.length ? `${jobs.length} applied jobs.` : "No applied jobs."}
+              {jobs.length
+                ? `${jobs.length} applied jobs.`
+                : "No applied jobs."}
             </TableCaption>
             <TableBody>
               {jobs.map((job) => (
@@ -125,20 +133,23 @@ export function AppliedJobsTable({
                       <span className="text-sm text-muted-foreground">-</span>
                     )}
                   </TableCell>
+                  <TableCell className={cn(tableColumns[2], "text-center")}>
+                    <JobDescriptionSheet job={job} />
+                  </TableCell>
                   <TableCell
                     className={cn(
-                      tableColumns[2],
+                      tableColumns[3],
                       "truncate text-muted-foreground",
                     )}
                   >
                     {job.postedAt}
                   </TableCell>
-                  <TableCell className={cn(tableColumns[3], "truncate")}>
+                  <TableCell className={cn(tableColumns[4], "truncate")}>
                     {job.company}
                   </TableCell>
                   <TableCell
                     className={cn(
-                      tableColumns[4],
+                      tableColumns[5],
                       "truncate text-muted-foreground",
                     )}
                   >
@@ -146,19 +157,19 @@ export function AppliedJobsTable({
                   </TableCell>
                   <TableCell
                     className={cn(
-                      tableColumns[5],
+                      tableColumns[6],
                       "truncate text-muted-foreground",
-                      )}
-                    >
-                      {job.yearsOfExperience ?? "Not checked"}
-                    </TableCell>
-                  <TableCell className={tableColumns[6]}>
+                    )}
+                  >
+                    {job.yearsOfExperience ?? "Not checked"}
+                  </TableCell>
+                  <TableCell className={tableColumns[7]}>
                     <ApplicationStatusCombobox
                       status={job.applicationStatus ?? "TBD"}
                       onStatusChange={(status) => onStatusChange(job, status)}
                     />
                   </TableCell>
-                  <TableCell className={cn(tableColumns[7], "text-center")}>
+                  <TableCell className={cn(tableColumns[8], "text-center")}>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Checkbox
@@ -191,7 +202,7 @@ export function AppliedJobsTable({
               {!jobs.length ? (
                 <TableRow>
                   <TableCell
-                    colSpan={8}
+                    colSpan={9}
                     className="h-20 text-center text-muted-foreground"
                   >
                     Applied jobs will appear here.

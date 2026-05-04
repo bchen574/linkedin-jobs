@@ -27,7 +27,7 @@ export function useJobs() {
   const hiddenJobsDeletedRef = useRef(false);
 
   const activeJobs = jobs.filter((job) => !job.hidden && !job.applied);
-  const appliedJobs = jobs.filter((job) => job.applied);
+  const appliedJobs = sortAppliedJobs(jobs.filter((job) => job.applied));
   const hiddenJobs = jobs.filter((job) => job.hidden);
   const visibleJobs = getVisibleJobs(activeJobs, selectedExperience);
   const experienceFilters = getExperienceFilters(activeJobs);
@@ -333,6 +333,48 @@ function combineJobs(jobs: JobResult[]) {
   }
 
   return rehydrateJobs(Array.from(jobsById.values()));
+}
+
+function sortAppliedJobs(jobs: JobResult[]) {
+  return [...jobs].sort((firstJob, secondJob) => {
+    const statusDifference =
+      getApplicationStatusSortOrder(firstJob.applicationStatus) -
+      getApplicationStatusSortOrder(secondJob.applicationStatus);
+
+    if (statusDifference !== 0) {
+      return statusDifference;
+    }
+
+    return (secondJob.postedAtTimestamp ?? 0) - (firstJob.postedAtTimestamp ?? 0);
+  });
+}
+
+function getApplicationStatusSortOrder(status: ApplicationStatus | undefined) {
+  if (status === "Screening") {
+    return 0;
+  }
+
+  if (status === "Interview-1") {
+    return 1;
+  }
+
+  if (status === "Interview-2") {
+    return 2;
+  }
+
+  if (status === "Interview-3") {
+    return 3;
+  }
+
+  if (status === "Offer") {
+    return 4;
+  }
+
+  if (status === "Rejected") {
+    return 5;
+  }
+
+  return 6;
 }
 
 async function getCleanupResult(jobs: JobResult[]) {

@@ -1,14 +1,25 @@
 "use client";
 
-import { ArrowSquareOut, CaretDown } from "@phosphor-icons/react";
+import { ArrowSquareOut, Article, CaretDown } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { getJobExperienceText } from "@/lib/jobs/filters";
 import { isFreshJob } from "@/lib/jobs/transforms";
 import type { JobResult } from "@/lib/jobs/types";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const loadingBarDurationMs = 5 * 60 * 1000;
 const maxEstimatedProgress = 95;
@@ -93,6 +104,62 @@ export function CollapsibleJobsSection({
       </div>
       {isOpen ? children : null}
     </section>
+  );
+}
+
+export function JobDescriptionSheet({ job }: { job: JobResult }) {
+  const descriptionText = job.descriptionText?.trim();
+
+  return (
+    <Sheet>
+      <SheetTrigger asChild>
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="outline"
+          aria-label={`Open job description for ${job.title}`}
+          className="mx-auto"
+        >
+          <Article aria-hidden="true" weight="bold" />
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="right" className="w-[min(90vw,42rem)] sm:max-w-2xl">
+        <SheetHeader className="">
+          <SheetTitle>{job.title}</SheetTitle>
+          <SheetDescription>
+            {job.company} - {job.location}
+          </SheetDescription>
+        </SheetHeader>
+        <ScrollArea className=" overflow-y-auto px-4">
+          <p className="pt-5 pb-16 whitespace-pre-wrap leading-relaxed text-sm">
+            {descriptionText || "No description text available."}
+          </p>
+          <div className="absolute bottom-0 left-0 right-0 h-20 bg-linear-to-t from-background to-transparent" />
+          <div className="absolute top-0 left-0 right-0 h-5 bg-linear-to-b from-background to-transparent" />
+        </ScrollArea>
+
+        <SheetFooter>
+          {job.linkedInUrl ? (
+            <Button asChild>
+              <a href={job.linkedInUrl} target="_blank" rel="noreferrer">
+                LinkedIn Post
+                <ArrowSquareOut aria-hidden="true" weight="bold" />
+              </a>
+            </Button>
+          ) : (
+            <Button type="button" disabled>
+              LinkedIn Post
+              <ArrowSquareOut aria-hidden="true" weight="bold" />
+            </Button>
+          )}
+          <SheetClose asChild>
+            <Button type="button" variant="outline">
+              Close
+            </Button>
+          </SheetClose>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }
 

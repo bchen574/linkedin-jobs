@@ -63,7 +63,6 @@ export function JobsTable() {
     deleteHiddenJobs,
     cleanupJobs,
   } = useJobs();
-  const [isAppliedJobsOpen, setIsAppliedJobsOpen] = useState(false);
   const [isHiddenJobsOpen, setIsHiddenJobsOpen] = useState(false);
   const [cleanupToast, setCleanupToast] = useState<CleanupToast>();
 
@@ -127,12 +126,15 @@ export function JobsTable() {
           lastUpdatedAt={lastUpdatedAt}
         />
 
-        <CollapsibleJobsSection
-          title={`Applied jobs (${appliedJobs.length})`}
-          description="Jobs you have marked as applied stay out of the main list."
-          isOpen={isAppliedJobsOpen}
-          onOpenChange={setIsAppliedJobsOpen}
-        >
+        <section className="mt-6 flex flex-col gap-3">
+          <div>
+            <h2 className="text-xl font-semibold tracking-normal">
+              Applied jobs ({appliedJobs.length})
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Jobs you have marked as applied stay out of the main list.
+            </p>
+          </div>
           <div className="md:hidden">
             <JobCards
               jobs={appliedJobs}
@@ -150,7 +152,7 @@ export function JobsTable() {
             onStatusChange={updateApplicationStatus}
             onUnapply={unapplyJob}
           />
-        </CollapsibleJobsSection>
+        </section>
 
         <CollapsibleJobsSection
           title={`Hidden jobs (${hiddenJobs.length})`}

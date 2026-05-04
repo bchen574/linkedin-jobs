@@ -3,7 +3,10 @@
 import { ArrowSquareOut, Eye, EyeSlash } from "@phosphor-icons/react";
 import { useState } from "react";
 
-import { getTableCaption } from "@/components/jobs-table-shared";
+import {
+  getTableCaption,
+  JobDescriptionSheet,
+} from "@/components/jobs-table-shared";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -24,7 +27,8 @@ const pendingHideFlashMs = 600;
 const pendingApplyFlashMs = 600;
 const tableColumns = [
   "w-80",
-  "w-20",
+  "w-8",
+  "w-12",
   "w-20",
   "",
   "",
@@ -91,24 +95,28 @@ export function MainJobsTable({
           <Table className="table-fixed">
             <TableHeader className="">
               <TableRow>
-                <TableHead className={cn(tableColumns[0], "pl-3")}>
+                <TableHead className={cn(tableColumns[0], "")}>
                   Job title
                 </TableHead>
                 <TableHead
-                  className={cn(tableColumns[1], "px-1 text-center")}
+                  className={cn(tableColumns[1], "text-center")}
                   aria-label="LinkedIn"
                 />
-                <TableHead className={tableColumns[2]}>Posted</TableHead>
-                <TableHead className={tableColumns[3]}>Company</TableHead>
-                <TableHead className={tableColumns[4]}>Location</TableHead>
-                <TableHead className={(tableColumns[5], "text-left")}>
+                <TableHead
+                  className={cn(tableColumns[2], "text-center")}
+                  aria-label="Description"
+                />
+                <TableHead className={tableColumns[3]}>Posted</TableHead>
+                <TableHead className={tableColumns[4]}>Company</TableHead>
+                <TableHead className={tableColumns[5]}>Location</TableHead>
+                <TableHead className={cn(tableColumns[6], "text-left")}>
                   Experience
                 </TableHead>
-                <TableHead className={cn(tableColumns[6], "text-center")}>
+                <TableHead className={cn(tableColumns[7], "text-center")}>
                   Applied
                 </TableHead>
                 <TableHead
-                  className={cn(tableColumns[7], "px-1 text-center")}
+                  className={cn(tableColumns[8], "text-center")}
                   aria-label="Hide"
                 />
               </TableRow>
@@ -172,7 +180,11 @@ export function MainJobsTable({
                       )}
                     </TableCell>
 
-                    <TableCell className={cn(tableColumns[2], "truncate")}>
+                    <TableCell className={cn(tableColumns[2], "text-center")}>
+                      <JobDescriptionSheet job={job} />
+                    </TableCell>
+
+                    <TableCell className={cn(tableColumns[3], "truncate")}>
                       {isFreshJob(job) ? (
                         <span className="inline-flex h-6 items-center border border-emerald-200 bg-emerald-50 px-2 text-xs font-medium text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300">
                           {job.postedAt}
@@ -184,17 +196,8 @@ export function MainJobsTable({
                       )}
                     </TableCell>
 
-                    <TableCell className={cn(tableColumns[3], "truncate")}>
+                    <TableCell className={cn(tableColumns[4], "truncate")}>
                       {job.company}
-                    </TableCell>
-
-                    <TableCell
-                      className={cn(
-                        tableColumns[4],
-                        "truncate text-muted-foreground",
-                      )}
-                    >
-                      {job.location}
                     </TableCell>
 
                     <TableCell
@@ -203,12 +206,21 @@ export function MainJobsTable({
                         "truncate text-muted-foreground",
                       )}
                     >
+                      {job.location}
+                    </TableCell>
+
+                    <TableCell
+                      className={cn(
+                        tableColumns[6],
+                        "truncate text-muted-foreground",
+                      )}
+                    >
                       {job.yearsOfExperience ??
                         (job.descriptionText ? "Checking..." : "Not checked")}
                     </TableCell>
 
                     {/* Applied */}
-                    <TableCell className={cn(tableColumns[6], "text-center")}>
+                    <TableCell className={cn(tableColumns[7], "text-center")}>
                       <Checkbox
                         checked={Boolean(job.applied)}
                         onCheckedChange={(checked) => {
@@ -222,7 +234,7 @@ export function MainJobsTable({
                       />
                     </TableCell>
 
-                    <TableCell className={cn(tableColumns[7], "text-center")}>
+                    <TableCell className={cn(tableColumns[8], "text-center")}>
                       <Button
                         type="button"
                         size="icon-sm"
@@ -246,7 +258,7 @@ export function MainJobsTable({
               {!allJobs.length ? (
                 <TableRow>
                   <TableCell
-                    colSpan={8}
+                    colSpan={9}
                     className="h-28 text-center text-muted-foreground"
                   >
                     {isLoading ? "Loading jobs..." : "No jobs found."}
