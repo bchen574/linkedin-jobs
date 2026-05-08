@@ -26,6 +26,7 @@ const maxFetchTimeMs = 5 * 60 * 1000;
 // Prevents a single job description from making the payload too large.
 const maxDescriptionTextLength = 20_000;
 const maxRowsPerBatch = 50;
+const maxRowsPerRead = 1000;
 
 export async function GET() {
   const supabaseUrl =
@@ -343,10 +344,44 @@ async function getRowsFromSupabase({
   supabaseSecretKey: string;
   tableName: string;
 }) {
+  const rows: Record<string, unknown>[] = [];
+  let offset = 0;
+
+  while (true) {
+    const batch = await getRowsBatchFromSupabase({
+      supabaseUrl,
+      supabaseSecretKey,
+      tableName,
+      offset,
+    });
+
+    rows.push(...batch);
+
+    if (batch.length < maxRowsPerRead) {
+      return rows;
+    }
+
+    offset += maxRowsPerRead;
+  }
+}
+
+async function getRowsBatchFromSupabase({
+  supabaseUrl,
+  supabaseSecretKey,
+  tableName,
+  offset,
+}: {
+  supabaseUrl: string;
+  supabaseSecretKey: string;
+  tableName: string;
+  offset: number;
+}) {
   const url = new URL(`/rest/v1/${tableName}`, supabaseUrl);
 
   url.searchParams.set("select", "*");
   url.searchParams.set("order", "posted_at.desc.nullslast");
+  url.searchParams.set("limit", String(maxRowsPerRead));
+  url.searchParams.set("offset", String(offset));
 
   const response = await fetch(url, {
     method: "GET",
